@@ -88,6 +88,14 @@ def check_elevenlabs() -> None:
     key = env("ELEVENLABS_API_KEY")
     if not key:
         return report("ELEVENLABS_API_KEY", False, "NOT SET - narration cannot run")
+    if not key.startswith("sk_"):
+        # The dashboard shows a key *ID* next to each key; it is easy to copy
+        # that by mistake. The real key is only revealed at create/rotate time.
+        return report(
+            "ELEVENLABS_API_KEY", False,
+            "looks like a key ID, not a key - real keys start with 'sk_' and are "
+            "shown only when created or rotated",
+        )
     r = requests.get(
         "https://api.elevenlabs.io/v1/user/subscription",
         headers={"xi-api-key": key},
