@@ -460,11 +460,26 @@ class HeyGenGenerator:
             "Content-Type": "application/json"
         }
         
-        prompt = f"{script.heygen_prompt} Speak in Hindi. Hindi script: {script.voice_script}"
+        # Use shorter prompt (HeyGen has limits)
+        voice_script_short = script.voice_script[:500] if len(script.voice_script) > 500 else script.voice_script
+        prompt = f"{script.heygen_prompt} Hindi script: {voice_script_short}"
         
-        payload = {"prompt": prompt}
+        # Add avatar and voice from config if available
+        payload = {
+            "prompt": prompt,
+        }
+        
+        avatar_id = self.config.data.get('heygen', {}).get('avatar_id')
+        voice_id = self.config.data.get('heygen', {}).get('voice_id')
+        if avatar_id and avatar_id != 'auto':
+            payload["avatar_id"] = avatar_id
+        if voice_id:
+            payload["voice_id"] = voice_id
+        
+        self.logger.debug(f"HeyGen prompt length: {len(prompt)}")
         
         resp = requests.post(create_url, headers=headers, json=payload, timeout=60)
+        self.logger.debug(f"HeyGen create response: {resp.status_code} - {resp.text[:200]}")
         resp.raise_for_status()
         result = resp.json()
         
@@ -504,7 +519,8 @@ class HeyGenGenerator:
                 raise Exception("Video completed but no URL returned")
             
             elif status == 'failed':
-                raise Exception(f"HeyGen generation failed: {data}")
+                error_msg = data.get('error', 'Unknown error')
+                raise Exception(f"HeyGen generation failed: {error_msg} (full response: {data})")
             
             time.sleep(10)  # Poll every 10 seconds
         
