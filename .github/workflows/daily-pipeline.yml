@@ -47,7 +47,7 @@ jobs:
       # ─── Create config.yaml from secrets ───
       - name: Create config from secrets
         run: |
-          cat > config.yaml << 'EOF'
+          cat > config.yaml << EOF
           # Kids Video Generator - Daily Automation Config
           # Generated from GitHub Secrets at runtime
           
