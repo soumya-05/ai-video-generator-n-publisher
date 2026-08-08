@@ -109,6 +109,20 @@ class StoryGenerator:
             len(story["shots"]),
             len(story["characters"]),
         )
+        # Narration longer than the shot has to be sped up to fit, and past
+        # ~1.3x it stops sounding like a storyteller to a small child.
+        overlong = [
+            (shot["shot_id"], words)
+            for shot in story["shots"]
+            if (words := len(shot["narration_hi"].split())) > WORDS_PER_SHOT + 4
+        ]
+        if overlong:
+            self.logger.warning(
+                "%d shot(s) over the %d-word budget and will be spoken fast: %s",
+                len(overlong),
+                WORDS_PER_SHOT + 4,
+                ", ".join(f"{sid}={n}w" for sid, n in overlong),
+            )
         return story
 
     def _call_claude(self, prompt: str) -> str:
@@ -235,7 +249,10 @@ REQUIREMENTS
    three shots in a row - the picture must keep changing.
 3. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
 4. narration_hi for each shot must be {WORDS_PER_SHOT - 3}-{WORDS_PER_SHOT + 4} Hindi
-   words so it fits 8 seconds when spoken aloud. Devanagari script only. This is
+   words. COUNT THE WORDS of every line before you finish and shorten any that
+   run over - {WORDS_PER_SHOT + 4} words is a hard limit, because longer lines get
+   sped up to fit the 8 seconds and stop sounding like a storyteller to a small
+   child. Devanagari script only. This is
    narration a storyteller reads, not subtitles. Prefer dialogue over description
    wherever a character can say it instead. Never simply narrate what the picture
    already shows - the words should add what the picture cannot.
