@@ -179,12 +179,13 @@ class Config:
         self.data['logging'].setdefault('backup_count', 5)
     
     def _setup_logging(self):
-        log_cfg = self.data.get('logging', {})
-        log_file = log_cfg.get('file', 'logs/pipeline.log')
+        # Check for LOG_LEVEL env var (GitHub Actions sets this)
+        log_level = os.environ.get('LOG_LEVEL', self.data.get('logging', {}).get('level', 'INFO'))
+        log_file = self.data.get('logging', {}).get('file', 'logs/pipeline.log')
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         
         logging.basicConfig(
-            level=getattr(logging, log_cfg.get('level', 'INFO')),
+            level=getattr(logging, log_level),
             format='%(asctime)s | %(levelname)-8s | %(message)s',
             handlers=[
                 logging.FileHandler(log_file, encoding='utf-8'),
@@ -344,13 +345,18 @@ class ScriptGenerator:
         }
         
         payload = {
-            "model": "claude-3-haiku-20240307",
+            "model": "claude-3-5-sonnet-20241022",
             "max_tokens": 1500,
             "messages": [{"role": "user", "content": prompt}]
         }
         
         try:
+            self.logger.debug(f"Anthropic API key (first 10): {self.api_key[:10] if self.api_key else 'None'}...")
+            self.logger.debug(f"Request payload: {json.dumps(payload)[:200]}")
             resp = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
+            self.logger.debug(f"Response status: {resp.status_code}")
+            self.logger.debug(f"Response headers: {dict(resp.headers)}")
+            self.logger.debug(f"Response text: {resp.text[:500]}")
             resp.raise_for_status()
             result = resp.json()
             

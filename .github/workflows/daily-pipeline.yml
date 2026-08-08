@@ -44,117 +44,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       
-      # ─── Create config.yaml from secrets ───
-      - name: Create config from secrets
-        run: |
-          cat > config.yaml << EOF
-          # Kids Video Generator - Daily Automation Config
-          # Generated from GitHub Secrets at runtime
-          
-          api_keys:
-            anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
-            heygen: "${{ secrets.HEYGEN_API_KEY }}"
-            youtube_client_id: "${{ secrets.YOUTUBE_CLIENT_ID }}"
-            youtube_client_secret: "${{ secrets.YOUTUBE_CLIENT_SECRET }}"
-            youtube_refresh_token: "${{ secrets.YOUTUBE_REFRESH_TOKEN }}"
-            instagram_access_token: "${{ secrets.INSTAGRAM_ACCESS_TOKEN }}"
-            instagram_account_id: "${{ secrets.INSTAGRAM_ACCOUNT_ID }}"
-            telegram_bot_token: "${{ secrets.TELEGRAM_BOT_TOKEN }}"
-            telegram_chat_id: "${{ secrets.TELEGRAM_CHAT_ID }}"
-            kie_api_token: "${{ secrets.KIE_API_TOKEN }}"
-            imgbb_api_key: "${{ secrets.IMGBB_API_KEY }}"
-            youtube_data_api_key: "${{ secrets.YOUTUBE_DATA_API_KEY }}"
-          
-          pipeline:
-            mode: "heygen"
-            schedule_cron: "0 2 * * *"
-            max_duration_seconds: 60
-            target_age_group: "4-8"
-            language: "hi"
-            content_schedule:
-              0: "nursery_rhyme"
-              1: "educational"
-              2: "fun_facts"
-              3: "story"
-              4: "poem"
-              5: "lullaby"
-              6: "cartoon_story"
-            topics:
-              nursery_rhyme:
-                - "चंदा मामा दूर के"
-                - "मछली जल की रानी है"
-                - "आ री आ निंदिया"
-                - "लकड़ी की काठी"
-              educational:
-                - "पानी का चक्र"
-                - "गिनती 1 से 10"
-                - "रंगों की दुनिया"
-                - "फलों के नाम"
-              fun_facts:
-                - "जानवरों के रोचक तथ्य"
-                - "अंतरिक्ष की अनोखी बातें"
-                - "पेड़ पौधों का जादू"
-              story:
-                - "प्यासा कौआ"
-                - "खरगोश और कछुआ"
-                - "शेर और चूहा"
-                - "चालाक लोमड़ी"
-              poem:
-                - "बारिश आई रिमझिम"
-                - "तितली रानी"
-                - "सूरज निकला"
-                - "फूलों की बगिया"
-              lullaby:
-                - "सो जा राजकुमार"
-                - "चंदा मामा आओ"
-                - "निंदिया आ जा"
-                - "आलू कचालू"
-              cartoon_story:
-                - "जंगल के दोस्त"
-                - "परियों की कहानी"
-                - "जादुई पेंसिल"
-                - "उड़न खटोला"
-          
-          heygen:
-            avatar_id: "auto"
-            voice_id: "hi-IN-Standard-A"
-            video_width: 1080
-            video_height: 1920
-          
-          animation_3d:
-            enabled: false
-            aspect_ratio: "portrait"
-            frames_per_shot: 10
-            max_parallel_jobs: 5
-            poll_interval_seconds: 5
-            max_polls: 120
-          
-          upload:
-            youtube:
-              category_id: "27"
-              privacy_status: "public"
-              made_for_kids: true
-              default_language: "hi"
-              tags: ["Shorts", "hindi", "kids", "education", "cartoon", "बच्चे", "HindiKids"]
-            instagram:
-              share_to_feed: true
-              tags: ["Reels", "InstagramReels", "HindiKids", "KidsContent", "बच्चे"]
-          
-          logging:
-            level: "INFO"
-            file: "logs/pipeline.log"
-            max_size_mb: 10
-            backup_count: 5
-          EOF
-      
-      # ─── Run Pipeline ───
+# ─── Run Pipeline ───
       - name: Run Daily Pipeline
         id: pipeline
         run: |
           python run_daily_pipeline.py
         env:
-          # Pass any additional env vars if needed
           PYTHONUNBUFFERED: 1
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          KIE_API_TOKEN: ${{ secrets.KIE_API_TOKEN }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          YOUTUBE_DATA_API_KEY: ${{ secrets.YOUTUBE_DATA_API_KEY }}
+          LOG_LEVEL: DEBUG
       
       # ─── Upload Logs as Artifact ───
       - name: Upload logs
