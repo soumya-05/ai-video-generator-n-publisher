@@ -187,8 +187,26 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _load_dotenv(path: Path) -> None:
+    """Load KEY=value lines from a local .env into the environment.
+
+    Convenience for running the CLI by hand; GitHub Actions injects real
+    secrets directly, and .env is gitignored. Never overrides an existing
+    variable, so an explicit export always wins.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
 class Config:
     def __init__(self, config_path: str = "config.yaml"):
+        _load_dotenv(Path(".env"))
         file_data = {}
         path = Path(config_path)
         if path.exists():
