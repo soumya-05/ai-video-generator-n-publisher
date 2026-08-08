@@ -65,6 +65,25 @@ class HindiNarrator:
             raise VoiceError(f"ElevenLabs returned empty audio for {label}")
         return destination
 
+    def my_voices(self) -> List[dict]:
+        """Voices actually on this account.
+
+        Only these work for text-to-speech. A voice browsed in the shared
+        library must be added to the account first, which is the usual cause
+        of a 400 from narrate().
+        """
+        resp = requests.get(
+            f"{BASE_URL}/voices",
+            headers={"xi-api-key": self.config.require_key("elevenlabs", "ELEVENLABS_API_KEY")},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return [
+            {"voice_id": v.get("voice_id"), "name": v.get("name"),
+             "labels": v.get("labels", {})}
+            for v in resp.json().get("voices", [])
+        ]
+
     def list_hindi_voices(self, limit: int = 30) -> List[dict]:
         """Browse Hindi voices from the shared library, for picking voice_id."""
         resp = requests.get(

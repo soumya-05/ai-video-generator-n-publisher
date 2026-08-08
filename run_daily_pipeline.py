@@ -48,8 +48,25 @@ def cmd_setup_cast(args, config) -> int:
 
 
 def cmd_voices(args, config) -> int:
-    for voice in HindiNarrator(config).list_hindi_voices():
-        config.logger.info("%s  %s", voice.get("voice_id"), voice.get("name"))
+    narrator = HindiNarrator(config)
+    configured = config.get("voice.voice_id")
+
+    mine = narrator.my_voices()
+    print("\nOn your account (only these work for narration):")
+    for voice in mine:
+        marker = "  <-- config voice.voice_id" if voice["voice_id"] == configured else ""
+        print(f"  {voice['voice_id']}  {voice['name']}{marker}")
+
+    if configured not in {v["voice_id"] for v in mine}:
+        print(
+            f"\nWARNING: configured voice {configured} is NOT on your account, so "
+            "narration will fail.\nAdd it from the shared library below, or set "
+            "voice.voice_id in config.yaml to one of the ids above."
+        )
+
+    print("\nHindi storyteller voices in the shared library (add before using):")
+    for voice in narrator.list_hindi_voices():
+        print(f"  {voice['voice_id']}  {voice['name']}  ({voice.get('accent')})")
     return 0
 
 
