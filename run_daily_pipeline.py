@@ -351,12 +351,7 @@ class ScriptGenerator:
         }
         
         try:
-            self.logger.debug(f"Anthropic API key (first 10): {self.api_key[:10] if self.api_key else 'None'}...")
-            self.logger.debug(f"Request payload: {json.dumps(payload)[:200]}")
             resp = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
-            self.logger.debug(f"Response status: {resp.status_code}")
-            self.logger.debug(f"Response headers: {dict(resp.headers)}")
-            self.logger.debug(f"Response text: {resp.text[:500]}")
             resp.raise_for_status()
             result = resp.json()
             
@@ -482,7 +477,7 @@ class HeyGenGenerator:
         # Step 2: Poll for completion
         return self._wait_for_completion(video_id)
     
-    def _wait_for_completion(self, video_id: str, max_wait: int = 300) -> str:
+    def _wait_for_completion(self, video_id: str, max_wait: int = 600) -> str:
         """Poll HeyGen until video is ready"""
         status_url = f"{self.base_url}/video_status.get"
         headers = {"X-Api-Key": self.api_key}
