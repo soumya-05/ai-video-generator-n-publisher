@@ -1,0 +1,36 @@
+title = "Kids Video Generator secret scanning"
+
+[extend]
+useDefault = true  # Anthropic, Google OAuth, Telegram, generic keys, etc.
+
+# Providers this project uses that the default rules do not cover.
+[[rules]]
+id = "elevenlabs-api-key"
+description = "ElevenLabs API key"
+regex = '''sk_[a-f0-9]{48}'''
+keywords = ["sk_"]
+
+[[rules]]
+id = "kie-api-token"
+description = "kie.ai API token"
+regex = '''(?i)kie[_-]?api[_-]?token["'\s:=]{1,10}([a-zA-Z0-9_\-]{24,})'''
+keywords = ["kie"]
+
+[[rules]]
+id = "imgbb-api-key"
+description = "imgbb API key"
+regex = '''(?i)imgbb[_-]?api[_-]?key["'\s:=]{1,10}([a-f0-9]{32})'''
+keywords = ["imgbb"]
+
+[allowlist]
+description = "Placeholders and documentation, not real credentials"
+regexes = [
+  '''your-[a-z-]+''',
+  '''xxxxxxxx+''',
+  '''AIzaSyXxxxxxxxxxxx''',
+  '''sk-ant-api03-xxxxxxxxxxxx''',
+]
+paths = [
+  '''config\.yaml\.example''',
+  '''SETUP_GUIDE\.md''',
+]

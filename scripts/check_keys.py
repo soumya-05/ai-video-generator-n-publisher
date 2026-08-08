@@ -25,6 +25,12 @@ def env(name: str) -> str:
     return os.environ.get(name, "").strip()
 
 
+# A GitHub secret can exist by name yet hold an empty value, which looks
+# identical to a missing secret from inside the job. Say so, or the fix is
+# non-obvious.
+UNSET = "empty - the GitHub secret is missing OR exists with a blank value"
+
+
 def check_anthropic() -> None:
     key = env("ANTHROPIC_API_KEY")
     if not key:
@@ -49,7 +55,7 @@ def check_anthropic() -> None:
 def check_kie() -> None:
     key = env("KIE_API_TOKEN")
     if not key:
-        return report("KIE_API_TOKEN", False, "not set")
+        return report("KIE_API_TOKEN", False, UNSET)
     headers = {"Authorization": f"Bearer {key}"}
     for url in (
         "https://api.kie.ai/api/v1/chat/credit",
@@ -72,7 +78,7 @@ def check_kie() -> None:
 def check_imgbb() -> None:
     key = env("IMGBB_API_KEY")
     if not key:
-        return report("IMGBB_API_KEY", False, "not set")
+        return report("IMGBB_API_KEY", False, UNSET)
     # Smallest legal upload: a 1x1 transparent GIF.
     tiny = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
     r = requests.post(
@@ -87,7 +93,7 @@ def check_imgbb() -> None:
 def check_elevenlabs() -> None:
     key = env("ELEVENLABS_API_KEY")
     if not key:
-        return report("ELEVENLABS_API_KEY", False, "NOT SET - narration cannot run")
+        return report("ELEVENLABS_API_KEY", False, f"{UNSET} - narration cannot run")
     if not key.startswith("sk_"):
         # The dashboard shows a key *ID* next to each key; it is easy to copy
         # that by mistake. The real key is only revealed at create/rotate time.
@@ -131,7 +137,7 @@ def check_voice_id() -> None:
 def check_youtube_data_key() -> None:
     key = env("YOUTUBE_DATA_API_KEY")
     if not key:
-        return report("YOUTUBE_DATA_API_KEY", False, "not set (trend signals degrade)")
+        return report("YOUTUBE_DATA_API_KEY", False, f"{UNSET} (trend signals degrade)")
     r = requests.get(
         "https://www.googleapis.com/youtube/v3/videos",
         params={"part": "id", "chart": "mostPopular", "maxResults": 1,
@@ -159,8 +165,12 @@ def check_youtube_oauth() -> None:
         timeout=TIMEOUT,
     )
     if r.status_code != 200:
+        hint = ""
+        if "invalid_grant" in r.text:
+            hint = ("  -> the token no longer matches a live account/client. "
+                    "Re-mint it: python scripts/youtube_auth.py")
         return report("YOUTUBE OAuth", False,
-                      f"refresh failed HTTP {r.status_code}: {r.text[:200]}")
+                      f"refresh failed HTTP {r.status_code}: {r.text[:200]}{hint}")
     token = r.json()["access_token"]
     scopes = r.json().get("scope", "")
     report("YOUTUBE OAuth", True, "refresh token works")
