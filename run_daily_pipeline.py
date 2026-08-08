@@ -141,21 +141,26 @@ class TopicSelector:
     def __init__(self, config: Config):
         self.config = config
         self.logger = config.logger
+        self.youtube_api_key = config.api_keys.get('youtube_data_api_key')
     
     def pick_today_topic(self) -> Dict[str, Any]:
-        """Pick topic based on day of week"""
+        """Pick topic - tries trending from YouTube, falls back to static"""
         now = datetime.now()
-        day_of_week = now.weekday()  # 0=Monday, 6=Sunday
-        
-        # Adjust: n8n workflow uses 0=Sunday
+        day_of_week = now.weekday()
         day_map = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 0}
         n8n_day = day_map[day_of_week]
-        
         content_type = self.config.content_schedule.get(n8n_day, "story")
-        topics_list = self.config.topics.get(content_type, ["बच्चों की कहानी"])
-        topic = random.choice(topics_list)
         
-        self.logger.info(f"Day: {now.strftime('%A')} | Type: {content_type} | Topic: {topic}")
+        # Try to get trending topic from YouTube
+        trending_topic = self._fetch_trending_topic(content_type)
+        
+        if trending_topic:
+            topic = trending_topic
+            self.logger.info(f"Using trending topic: {topic}")
+        else:
+            topics_list = self.config.topics.get(content_type, ["बच्चों की कहानी"])
+            topic = random.choice(topics_list)
+            self.logger.info(f"Using static topic: {topic}")
         
         return {
             "topic": topic,
@@ -163,6 +168,63 @@ class TopicSelector:
             "date": now.strftime("%Y-%m-%d"),
             "day_of_week": n8n_day
         }
+    
+    def _fetch_trending_topic(self, content_type: str) -> Optional[str]:
+        """Fetch trending Hindi kids topics from YouTube"""
+        if not self.youtube_api_key:
+            return None
+        
+        try:
+            # Search queries based on content type
+            search_queries = {
+                "story": "hindi kids story कहानी cartoon",
+                "nursery_rhyme": "hindi nursery rhyme बाल गीत",
+                "educational": "hindi kids educational शिक्षा",
+                "fun_facts": "hindi fun facts रोचक तथ्य",
+                "poem": "hindi poem कविता बच्चों",
+                "lullaby": "hindi lullaby लोरी",
+                "cartoon_story": "hindi cartoon story कार्टून कहानी"
+            }
+            
+            query = search_queries.get(content_type, "hindi kids video")
+            
+            url = "https://www.googleapis.com/youtube/v3/search"
+            params = {
+                "part": "snippet",
+                "q": query,
+                "regionCode": "IN",
+                "relevanceLanguage": "hi",
+                "type": "video",
+                "order": "viewCount",
+                "maxResults": 10,
+                "key": self.youtube_api_key
+            }
+            
+            resp = requests.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            items = data.get("items", [])
+            if not items:
+                return None
+            
+            # Extract clean titles, filter for kid-appropriate
+            titles = []
+            for item in items:
+                title = item["snippet"]["title"]
+                title = title.replace("&", "&").replace("@\\w+", "").strip()
+                # Filter: length, kid keywords
+                if len(title) > 5 and any(kw in title.lower() for kw in 
+                    ["कहानी", "story", "बच्चे", "kids", "cartoon", "राइम", "rhymes", "गीत", "song"]):
+                    titles.append(title)
+            
+            if titles:
+                return random.choice(titles[:5])  # Pick from top 5
+            
+        except Exception as e:
+            self.logger.warning(f"Trending fetch failed: {e}")
+        
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
