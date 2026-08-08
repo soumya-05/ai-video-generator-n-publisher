@@ -477,7 +477,7 @@ class HeyGenGenerator:
         # Step 2: Poll for completion
         return self._wait_for_completion(video_id)
     
-    def _wait_for_completion(self, video_id: str, max_wait: int = 600) -> str:
+    def _wait_for_completion(self, video_id: str, max_wait: int = 1800) -> str:
         """Poll HeyGen until video is ready"""
         status_url = f"{self.base_url}/video_status.get"
         headers = {"X-Api-Key": self.api_key}
