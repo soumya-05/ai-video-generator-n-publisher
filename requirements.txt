@@ -1,8 +1,6 @@
-# Core dependencies
 pyyaml>=6.0
 requests>=2.31
-apscheduler>=3.10
 
-# For 3D animation pipeline (optional)
-# pillow>=10.0
-# ffmpeg-python>=0.2
+# ffmpeg is a system binary, not a pip package:
+#   macOS:  brew install ffmpeg
+#   Ubuntu: sudo apt-get install -y ffmpeg

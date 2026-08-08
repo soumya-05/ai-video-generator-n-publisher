@@ -2,108 +2,100 @@ name: Daily Kids Video Pipeline
 
 on:
   schedule:
-    # Runs at 2:00 AM UTC daily (7:30 AM IST)
+    # 02:00 UTC = 07:30 IST
     - cron: '0 2 * * *'
-  workflow_dispatch:  # Allow manual trigger
-  push:
-    branches: [main]
-    paths:
-      - 'config.yaml'
-      - 'run_daily_pipeline.py'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Plan the video without spending any credits'
+        type: boolean
+        default: true
+      only:
+        description: 'Force one format'
+        type: choice
+        options: ['', 'short', 'long']
+        default: ''
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
 
 jobs:
   generate-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+    # A 38-shot long story renders ~38 Veo clips; give it room.
+    timeout-minutes: 180
+
     permissions:
-      contents: read
-      # Needed for uploading artifacts if needed
-      
+      # The pipeline commits data/history.json back so tomorrow's story knows
+      # what has already aired.
+      contents: write
+
     steps:
-      # ─── Checkout ───
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      # ─── Setup Python ───
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      # ─── Install Dependencies ───
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml requests apscheduler
-      
-      # ─── Configure Git (for any commits if needed) ───
-      - name: Configure Git
+          pip install -r requirements.txt
+
+      - name: Install ffmpeg
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-      
-# ─── Run Pipeline ───
-      - name: Run Daily Pipeline
-        id: pipeline
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Run pipeline
         run: |
-          python run_daily_pipeline.py
+          ARGS="run"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "${{ inputs.only }}" ]; then ARGS="$ARGS --only ${{ inputs.only }}"; fi
+          python run_daily_pipeline.py $ARGS
         env:
           PYTHONUNBUFFERED: 1
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          HEYGEN_API_KEY: ${{ secrets.HEYGEN_API_KEY }}
+          KIE_API_TOKEN: ${{ secrets.KIE_API_TOKEN }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          YOUTUBE_DATA_API_KEY: ${{ secrets.YOUTUBE_DATA_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          KIE_API_TOKEN: ${{ secrets.KIE_API_TOKEN }}
-          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
-          YOUTUBE_DATA_API_KEY: ${{ secrets.YOUTUBE_DATA_API_KEY }}
-      
-      # ─── Upload Logs as Artifact ───
-      - name: Upload logs
+
+      - name: Commit published history
+        if: success() && inputs.dry_run != true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/history.json
+          git diff --staged --quiet || git commit -m "chore: record published episode [skip ci]"
+          git push
+
+      - name: Upload logs and story artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-logs
           path: |
             logs/
-            *.log
+            build/**/*.json
           retention-days: 7
-      
-      # ─── Notify on Failure ───
+
+      # Covers failures the pipeline's own notifier cannot report, e.g. the job
+      # dying before Python starts.
       - name: Notify failure
         if: failure()
-        run: |
-          # Send failure notification via Telegram if configured
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-              -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-              -d text="❌ GitHub Actions: Daily pipeline failed! Check workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              -d parse_mode="Markdown"
-          fi
-
-  # ─── Optional: Weekly Summary ───
-  weekly-summary:
-    needs: generate-and-publish
-    if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * 0'  # Sunday only
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Generate weekly report
-        run: |
-          # This could query YouTube API for analytics
-          echo "Weekly summary would go here"
         env:
-          YOUTUBE_DATA_API_KEY: ${{ secrets.YOUTUBE_DATA_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          [ -z "$TELEGRAM_BOT_TOKEN" ] && exit 0
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            -d text="GitHub Actions: daily pipeline failed. https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

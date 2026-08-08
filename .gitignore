@@ -3,31 +3,23 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 env/
 .env
+story-to-animation-skills/**/venv/
+story-to-animation-skills/**/.venv/
 
 # Logs
 logs/
 *.log
 
-# Config with secrets
-config.yaml
+# config.yaml holds NO secrets - API keys come from environment variables - so
+# it is committed on purpose, otherwise GitHub Actions would not see your
+# settings and would silently fall back to the built-in defaults.
 
-# Video/Image outputs
+# Generated video work
+build/
 *.mp4
-*.png
-*.jpg
-characters/
-backgrounds/
-composites/
-clips/
-final_animation.mp4
-
-# JSON data files (generated)
-characters.json
-backgrounds.json
-shots.json
-story.md
 
 # IDE
 .vscode/
@@ -39,5 +31,10 @@ story.md
 .DS_Store
 Thumbs.db
 
-# GitHub Actions
-.github/workflows/*.yml.bak
+# Unrelated files that happen to live in this folder
+archive.zip
+domain_checker.py
+unigram_freq.csv
+
+# NOTE: data/cast.json and data/history.json MUST be committed - they pin the
+# permanent characters and the published-story history.
