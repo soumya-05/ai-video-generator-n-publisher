@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Logs
+logs/
+*.log
+
+# Config with secrets
+config.yaml
+
+# Video/Image outputs
+*.mp4
+*.png
+*.jpg
+characters/
+backgrounds/
+composites/
+clips/
+final_animation.mp4
+
+# JSON data files (generated)
+characters.json
+backgrounds.json
+shots.json
+story.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# GitHub Actions
+.github/workflows/*.yml.bak
