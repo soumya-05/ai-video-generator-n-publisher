@@ -77,13 +77,106 @@ class PipelineResult:
 class Config:
     def __init__(self, config_path: str = "config.yaml"):
         self.path = Path(config_path)
-        if not self.path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
+        self.data = {}
         
-        with open(self.path, 'r', encoding='utf-8') as f:
-            self.data = yaml.safe_load(f)
+        # 1. Load from config.yaml if exists
+        if self.path.exists():
+            with open(self.path, 'r', encoding='utf-8') as f:
+                self.data = yaml.safe_load(f) or {}
+        
+        # 2. Override with environment variables (for GitHub Actions)
+        self._load_from_env()
         
         self._setup_logging()
+    
+    def _load_from_env(self):
+        """Load API keys from environment variables"""
+        env_mapping = {
+            'anthropic': 'ANTHROPIC_API_KEY',
+            'heygen': 'HEYGEN_API_KEY',
+            'youtube_client_id': 'YOUTUBE_CLIENT_ID',
+            'youtube_client_secret': 'YOUTUBE_CLIENT_SECRET',
+            'youtube_refresh_token': 'YOUTUBE_REFRESH_TOKEN',
+            'instagram_access_token': 'INSTAGRAM_ACCESS_TOKEN',
+            'instagram_account_id': 'INSTAGRAM_ACCOUNT_ID',
+            'telegram_bot_token': 'TELEGRAM_BOT_TOKEN',
+            'telegram_chat_id': 'TELEGRAM_CHAT_ID',
+            'kie_api_token': 'KIE_API_TOKEN',
+            'imgbb_api_key': 'IMGBB_API_KEY',
+            'youtube_data_api_key': 'YOUTUBE_DATA_API_KEY',
+        }
+        
+        if 'api_keys' not in self.data:
+            self.data['api_keys'] = {}
+        
+        for key, env_var in env_mapping.items():
+            env_val = os.environ.get(env_var)
+            if env_val:
+                self.data['api_keys'][key] = env_val
+        
+        # Also load pipeline settings from env if present
+        if 'pipeline' not in self.data:
+            self.data['pipeline'] = {}
+        
+        # Default pipeline settings (can be overridden by config.yaml)
+        defaults = {
+            'mode': 'heygen',
+            'schedule_cron': '0 2 * * *',
+            'max_duration_seconds': 60,
+            'target_age_group': '4-8',
+            'language': 'hi',
+            'content_schedule': {
+                0: "nursery_rhyme",
+                1: "educational",
+                2: "fun_facts",
+                3: "story",
+                4: "poem",
+                5: "lullaby",
+                6: "cartoon_story"
+            },
+            'topics': {
+                'nursery_rhyme': ["चंदा मामा दूर के", "मछली जल की रानी है", "आ री आ निंदिया", "लकड़ी की काठी"],
+                'educational': ["पानी का चक्र", "गिनती 1 से 10", "रंगों की दुनिया", "फलों के नाम"],
+                'fun_facts': ["जानवरों के रोचक तथ्य", "अंतरिक्ष की अनोखी बातें", "पेड़ पौधों का जादू"],
+                'story': ["प्यासा कौआ", "खरगोश और कछुआ", "शेर और चूहा", "चालाक लोमड़ी"],
+                'poem': ["बारिश आई रिमझिम", "तितली रानी", "सूरज निकला", "फूलों की बगिया"],
+                'lullaby': ["सो जा राजकुमार", "चंदा मामा आओ", "निंदिया आ जा", "आलू कचालू"],
+                'cartoon_story': ["जंगल के दोस्त", "परियों की कहानी", "जादुई पेंसिल", "उड़न खटोला"]
+            }
+        }
+        
+        for key, val in defaults.items():
+            if key not in self.data['pipeline']:
+                self.data['pipeline'][key] = val
+        
+        # Heygen defaults
+        if 'heygen' not in self.data:
+            self.data['heygen'] = {}
+        self.data['heygen'].setdefault('avatar_id', 'auto')
+        self.data['heygen'].setdefault('voice_id', 'hi-IN-Standard-A')
+        self.data['heygen'].setdefault('video_width', 1080)
+        self.data['heygen'].setdefault('video_height', 1920)
+        
+        # Upload defaults
+        if 'upload' not in self.data:
+            self.data['upload'] = {}
+        self.data['upload'].setdefault('youtube', {})
+        self.data['upload']['youtube'].setdefault('category_id', '27')
+        self.data['upload']['youtube'].setdefault('privacy_status', 'public')
+        self.data['upload']['youtube'].setdefault('made_for_kids', True)
+        self.data['upload']['youtube'].setdefault('default_language', 'hi')
+        self.data['upload']['youtube'].setdefault('tags', ['Shorts', 'hindi', 'kids', 'education', 'cartoon', 'बच्चे', 'HindiKids'])
+        self.data['upload'].setdefault('instagram', {})
+        self.data['upload']['instagram'].setdefault('share_to_feed', True)
+        self.data['upload']['instagram'].setdefault('tags', ['Reels', 'InstagramReels', 'HindiKids', 'KidsContent', 'बच्चे'])
+        
+        # Logging defaults
+        if 'logging' not in self.data:
+            self.data['logging'] = {}
+        self.data['logging'].setdefault('level', 'INFO')
+        self.data['logging'].setdefault('file', 'logs/pipeline.log')
+        self.data['logging'].setdefault('max_size_mb', 10)
+        self.data['logging'].setdefault('backup_count', 5)
     
     def _setup_logging(self):
         log_cfg = self.data.get('logging', {})
