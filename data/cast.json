@@ -1,0 +1,57 @@
+{
+  "chintu": {
+    "name": "चिंटू",
+    "role": "host",
+    "catchphrase": "चलो, कहानी शुरू करते हैं!",
+    "description": "a cheerful 7-year-old Indian boy, round friendly face, warm brown skin, big expressive dark eyes, neat black hair with a small cowlick at the crown, wearing a bright yellow kurta with small orange embroidery, blue cotton pyjama trousers, brown sandals, a red thread bracelet on his right wrist, short slightly chubby build",
+    "reference_urls": {
+      "front": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/chintu_front.png",
+      "three_quarter": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/chintu_three_quarter.png",
+      "side": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/chintu_side.png"
+    }
+  },
+  "mithu": {
+    "name": "मिट्ठू",
+    "role": "friend",
+    "catchphrase": "मिट्ठू सब जानता है!",
+    "description": "a small chatty rose-ringed parakeet with brilliant emerald green feathers, a curved coral-red beak, a thin pink neck ring, bright amber eyes, and one cheeky tuft of feathers sticking up on his head",
+    "reference_urls": {
+      "front": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/mithu_front.png",
+      "three_quarter": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/mithu_three_quarter.png",
+      "side": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/mithu_side.png"
+    }
+  },
+  "gullu": {
+    "name": "गुल्लू",
+    "role": "friend",
+    "catchphrase": "गुल्लू मदद करेगा!",
+    "description": "a gentle baby Indian elephant, soft dusty grey wrinkled skin, oversized floppy ears, long curious trunk, kind hazel eyes with long lashes, a small string of orange marigold flowers around his neck, chubby and slightly clumsy",
+    "reference_urls": {
+      "front": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/gullu_front.png",
+      "three_quarter": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/gullu_three_quarter.png",
+      "side": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/gullu_side.png"
+    }
+  },
+  "pari": {
+    "name": "परी",
+    "role": "friend",
+    "catchphrase": "मुझे पता चल गया!",
+    "description": "a clever 6-year-old Indian girl, warm brown skin, two neat black braids tied with red ribbons, wearing a teal salwar kameez with tiny white polka dots and white canvas shoes, always carrying a small cloth notebook",
+    "reference_urls": {
+      "front": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/pari_front.png",
+      "three_quarter": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/pari_three_quarter.png",
+      "side": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/pari_side.png"
+    }
+  },
+  "bhola": {
+    "name": "भोला",
+    "role": "friend",
+    "catchphrase": "भौं भौं!",
+    "description": "a scruffy friendly Indian street dog, shaggy sandy golden-brown fur, one ear permanently flopped over, a long wagging tail, a faded blue collar, big trusting brown eyes",
+    "reference_urls": {
+      "front": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/bhola_front.png",
+      "three_quarter": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/bhola_three_quarter.png",
+      "side": "https://raw.githubusercontent.com/soumya-05/kids-video-generator/main/data/cast/bhola_side.png"
+    }
+  }
+}

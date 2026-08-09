@@ -149,7 +149,7 @@ DEFAULTS: Dict[str, Any] = {
             "catchphrase": "मुझे पता चल गया!",
             "description": (
                 "a clever 6-year-old Indian girl, warm brown skin, two neat black "
-                "braids tied with red ribbons, round wire spectacles, wearing a "
+                "braids tied with red ribbons, wearing a "
                 "teal salwar kameez with tiny white polka dots and white canvas "
                 "shoes, always carrying a small cloth notebook"
             ),
@@ -159,8 +159,8 @@ DEFAULTS: Dict[str, Any] = {
             "role": "friend",
             "catchphrase": "भौं भौं!",
             "description": (
-                "a scruffy friendly Indian street dog, sandy golden-brown fur with "
-                "a white patch over one eye, one ear permanently flopped over, a "
+                "a scruffy friendly Indian street dog, shaggy sandy golden-brown "
+                "fur, one ear permanently flopped over, a "
                 "long wagging tail, a faded blue collar, big trusting brown eyes"
             ),
         },
