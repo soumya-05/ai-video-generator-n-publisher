@@ -19,8 +19,14 @@ import sys
 import threading
 import urllib.parse
 import webbrowser
+from pathlib import Path
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from kids_video.config import _load_dotenv  # noqa: E402
+
+_load_dotenv(Path(".env"))
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -59,11 +65,11 @@ def main() -> int:
     client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET", "").strip()
     if not client_id or not client_secret:
         print(
-            "Set the OAuth client first, e.g.:\n"
-            "  read -s YOUTUBE_CLIENT_SECRET && export YOUTUBE_CLIENT_SECRET\n"
-            "  export YOUTUBE_CLIENT_ID='....apps.googleusercontent.com'\n"
-            "Both come from the SAME client in Google Cloud Console >\n"
-            "APIs & Services > Credentials.",
+            "Set the OAuth client first:\n"
+            "  python scripts/init_env.py\n"
+            "Fill in YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET. Both come from\n"
+            "the SAME client in Google Cloud Console > APIs & Services >\n"
+            "Credentials, and it must be of type 'Desktop app'.",
             file=sys.stderr,
         )
         return 1
