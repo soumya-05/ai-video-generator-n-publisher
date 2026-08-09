@@ -13,7 +13,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install requests
+      # check_keys imports kids_video.config to read .env and config.yaml,
+      # so it needs the project's dependencies, not just requests.
+      - run: pip install -r requirements.txt
       - run: python scripts/check_keys.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
