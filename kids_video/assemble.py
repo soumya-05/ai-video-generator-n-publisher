@@ -1,7 +1,10 @@
-"""FFmpeg assembly: swap in Hindi narration, then stitch shots into one video.
+"""FFmpeg assembly: swap in Hindi narration, burn in English subtitles, then
+stitch shots into one video.
 
 Every segment is re-encoded with identical parameters so the final concat can
-run as a pure stream copy.
+run as a pure stream copy. Subtitles are burned per segment rather than over the
+finished film, because the segment encode is happening anyway and each shot's
+exact duration is already known here.
 """
 
 import json
@@ -32,13 +35,32 @@ class AssemblyError(RuntimeError):
     pass
 
 
-def ensure_ffmpeg() -> None:
+def ensure_ffmpeg(need_subtitles: bool = False) -> None:
+    """Verify ffmpeg can do everything this run needs, before anything is paid for."""
     for tool in ("ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             raise AssemblyError(
                 f"{tool} not found on PATH. Install it with 'brew install ffmpeg' "
                 f"(macOS) or 'sudo apt-get install -y ffmpeg' (Linux/CI)."
             )
+    if need_subtitles and not _has_filter("subtitles"):
+        raise AssemblyError(
+            "This ffmpeg was built without libass, so English subtitles cannot be "
+            "burned in. Install a full build ('brew reinstall ffmpeg' on macOS, "
+            "'sudo apt-get install -y ffmpeg' on Linux/CI) or set "
+            "subtitles.enabled: false in config.yaml."
+        )
+
+
+def _has_filter(name: str) -> bool:
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True
+    )
+    return any(
+        line.split()[1:2] == [name]
+        for line in result.stdout.splitlines()
+        if len(line.split()) > 1
+    )
 
 
 def _run(args: List[str]) -> None:
@@ -66,7 +88,12 @@ def probe_duration(path: Path) -> float:
 
 
 def build_segment(
-    clip: Path, narration: Path, destination: Path, aspect_ratio: str
+    clip: Path,
+    narration: Path,
+    destination: Path,
+    aspect_ratio: str,
+    subtitle: Optional[str] = None,
+    subtitle_style: Optional[dict] = None,
 ) -> Path:
     """Replace a Veo clip's own audio with Hindi narration, matching durations."""
     width, height = TARGET_SIZE.get(aspect_ratio, TARGET_SIZE["16:9"])
@@ -92,11 +119,19 @@ def build_segment(
     if pad_seconds > 0.05:
         video_chain.append(f"tpad=stop_mode=clone:stop_duration={pad_seconds:.3f}")
 
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if subtitle:
+        # Burned in, not a sidecar track: Shorts do not reliably show captions.
+        ass_path = destination.with_suffix(".ass")
+        _write_ass(
+            subtitle, segment_seconds, ass_path, width, height, subtitle_style or {}
+        )
+        video_chain.append(f"subtitles={_escape_filter_path(ass_path)}")
+
     filter_complex = (
         f"[0:v]{','.join(video_chain)}[v];[1:a]{','.join(audio_chain)}[a]"
     )
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
     _run(
         [
             "ffmpeg", "-y",
@@ -112,23 +147,50 @@ def build_segment(
     return destination
 
 
-def normalize(source: Path, destination: Path, aspect_ratio: str) -> Path:
-    """Re-encode an external clip (e.g. the HeyGen mascot) to match segment settings."""
-    width, height = TARGET_SIZE.get(aspect_ratio, TARGET_SIZE["16:9"])
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    _run(
-        [
-            "ffmpeg", "-y",
-            "-i", str(source),
-            "-vf", (
-                f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height}"
-            ),
-            "-af", "aresample=async=1",
-            *VIDEO_ARGS,
-            str(destination),
-        ]
-    )
+def _escape_filter_path(path: Path) -> str:
+    """Quote a path for use inside an ffmpeg filtergraph argument."""
+    escaped = str(path).replace("\\", "\\\\").replace("'", r"\'").replace(":", r"\:")
+    return f"'{escaped}'"
+
+
+def _ass_time(seconds: float) -> str:
+    hours, rest = divmod(max(0.0, seconds), 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{int(hours)}:{int(minutes):02d}:{secs:05.2f}"
+
+
+def _write_ass(
+    text: str, seconds: float, destination: Path, width: int, height: int, style: dict
+) -> Path:
+    """Write a one-cue ASS subtitle file sized in real pixels.
+
+    An SRT would be simpler, but ffmpeg gives SRT a fixed 384x288 canvas and
+    then scales it, so the on-screen size depends on the video resolution in a
+    way that is hard to reason about. Declaring PlayRes as the actual frame size
+    means Fontsize and MarginV below are literal pixels.
+    """
+    # \N is the ASS hard line break; libass wraps the rest on its own.
+    body = text.strip().replace("\n", r"\N")
+    content = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {width}
+PlayResY: {height}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{style.get('font', 'DejaVu Sans')},{style.get('font_size', 52)},\
+{style.get('primary_colour', '&H00FFFFFF')},&H000000FF,\
+{style.get('outline_colour', '&H00000000')},{style.get('back_colour', '&H80000000')},\
+-1,0,0,0,100,100,0,0,3,{style.get('outline', 6)},0,2,\
+{style.get('margin_h', 80)},{style.get('margin_h', 80)},{style.get('margin_v', 90)},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,{_ass_time(0)},{_ass_time(seconds)},Default,,0,0,0,,{body}
+"""
+    destination.write_text(content, encoding="utf-8")
     return destination
 
 

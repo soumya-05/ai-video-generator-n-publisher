@@ -18,7 +18,6 @@ ENV_KEYS = {
     "ANTHROPIC_API_KEY": "anthropic",
     "KIE_API_TOKEN": "kie",
     "ELEVENLABS_API_KEY": "elevenlabs",
-    "HEYGEN_API_KEY": "heygen",
     "YOUTUBE_CLIENT_ID": "youtube_client_id",
     "YOUTUBE_CLIENT_SECRET": "youtube_client_secret",
     "YOUTUBE_REFRESH_TOKEN": "youtube_refresh_token",
@@ -34,22 +33,22 @@ DEFAULTS: Dict[str, Any] = {
         "short_days": [0, 1, 2, 3, 4, 5, 6],
         "long_days": [6],  # Sunday (Python weekday(): Mon=0 .. Sun=6)
         "language": "hi",
-        "target_age_group": "4-8",
-        # Content type rotation, indexed by Python weekday()
+        "target_audience": "curious adults",
+        # Subject area rotation, indexed by Python weekday(). These are areas,
+        # not topics: Claude picks a specific mechanism inside one each run.
         "content_rotation": [
-            "adventure_story",
-            "moral_story",
-            "fun_facts",
-            "folk_tale",
-            "science_wonder",
-            "friendship_story",
-            "magical_story",
+            "how_everyday_machines_work",
+            "physics_and_energy",
+            "space_and_astronomy",
+            "technology_and_computing",
+            "biology_and_the_human_body",
+            "medical_science",
+            "engineering_and_infrastructure",
         ],
         "history_size": 90,
     },
     "short": {
         "shot_count": 8,
-        "friends_per_episode": 1,  # 8 shots has no room for a crowd
         "aspect_ratio": "9:16",
         "veo_model": "veo3_fast",
         "resolution": "1080p",
@@ -62,8 +61,6 @@ DEFAULTS: Dict[str, Any] = {
     },
     "kie": {
         "base_url": "https://api.kie.ai/api/v1",
-        "character_image_model": "nano-banana-pro",
-        "background_image_model": "seedream/5-pro-image-to-image",
         "max_parallel_jobs": 5,
         "poll_interval_seconds": 10,
         "max_poll_seconds": 900,
@@ -73,117 +70,55 @@ DEFAULTS: Dict[str, Any] = {
         # blocked request renders nothing and is not billed, so retry it.
         "clip_attempts": 3,
     },
-    # Character reference sheets are served straight from this repository, so
-    # it must stay public. kie.ai deletes generated media after 14 days.
-    "cast_images": {
-        "repo": "",  # "owner/name"; blank fails setup-cast with an explanation
-        "branch": "main",
-        "dir": "data/cast",
-    },
     "voice": {
         "provider": "elevenlabs",
         "model_id": "eleven_multilingual_v2",
-        "voice_id": "3AMU7jXQuQa3oRvRqUmb",  # Viraj; used when rotation is empty
-        # A different Hindi storyteller each weekday, indexed by Python
-        # weekday(). All are kids/animation voices from the ElevenLabs library,
-        # which need a paid plan. Empty this list to pin voice_id instead.
-        "rotation": [
-            "CNKl99QEbWm8RQ4D8GfC",  # Mon - Chutki, cute young kids storyteller
-            "subIZc6skATBQ1Rbqpi7",  # Tue - Mahira J, expressive kids narrator
-            "4RloeZf2FRvGiu4uoKOf",  # Wed - Riya, children storytelling
-            "MIl0Flub6Sc9KSkX2A42",  # Thu - Mithi, moral kids stories
-            "A2VREc2wjqtSZloENLHe",  # Fri - Suhana J, very young and expressive
-            "psk8YLODv4ETdKheNwwz",  # Sat - Gappu, kids cartoon character
-            "Rg5w9usCZCJdEdW501zk",  # Sun - Vidya, warm motherly (long story day)
-        ],
+        # A single authoritative documentary narrator. An explainer channel
+        # builds trust through a recognisable voice, so unlike a story channel
+        # there is deliberately no per-weekday rotation.
+        "voice_id": "3AMU7jXQuQa3oRvRqUmb",  # Viraj
+        "rotation": [],
         "output_format": "mp3_44100_128",
-        "stability": 0.45,
-        "similarity_boost": 0.75,
-        "style": 0.35,
+        # Lower style and higher stability than storytelling: an explainer
+        # should sound measured and consistent, not performed.
+        "stability": 0.55,
+        "similarity_boost": 0.8,
+        "style": 0.2,
         "speed": 1.0,
     },
-    "mascot": {
-        # HeyGen v3 lip-synced 3D character for the intro/outro
+    # English subtitles burned into the picture. Shorts do not reliably surface
+    # a CC track, so the text has to be part of the frame. Sizes and margins are
+    # literal pixels at the target resolution (see assemble._write_ass).
+    "subtitles": {
         "enabled": True,
-        "avatar_id": "",  # set after creating an avatar; blank disables
-        "voice_id": "",  # 32-char hex from GET /v3/voices?language=Hindi
-        "engine": "avatar_iv",
-        "expressiveness": "high",
-        "base_url": "https://api.heygen.com/v3",
-        "poll_interval_seconds": 15,
-        "max_poll_seconds": 1800,
+        # libass falls back through fontconfig, so a missing font still renders.
+        "font": "DejaVu Sans",
+        "font_size": {"9:16": 62, "16:9": 50, "1:1": 54},
+        # ASS colours are &HAABBGGRR - alpha first, then blue/green/red.
+        "primary_colour": "&H00FFFFFF",  # opaque white
+        "outline_colour": "&H00000000",
+        "back_colour": "&H60000000",  # ~62% opaque black box
+        "outline": 6,  # box padding when BorderStyle is 3
+        "margin_h": 80,
+        # Lifted well clear of the Shorts UI overlay at the bottom of the frame.
+        "margin_v": {"9:16": 420, "16:9": 80, "1:1": 120},
     },
     "youtube": {
-        "category_id": "27",  # Education
+        "category_id": "28",  # Science & Technology
         "privacy_status": "public",
-        "made_for_kids": True,
+        "made_for_kids": False,
         "default_language": "hi",
     },
-    # The permanent cast. Reference sheets are rendered once by `setup-cast`
-    # and pinned in data/cast.json; after that these descriptions must not
-    # change or the characters would drift. Extra cast members cost nothing per
-    # episode (a Veo clip is the same price with one character or four), only a
-    # few cents once for the reference sheet.
-    "cast": {
-        "chintu": {
-            "name": "चिंटू",
-            "role": "host",
-            "catchphrase": "चलो, कहानी शुरू करते हैं!",
-            "description": (
-                "a cheerful 7-year-old Indian boy, round friendly face, warm brown "
-                "skin, big expressive dark eyes, neat black hair with a small "
-                "cowlick at the crown, wearing a bright yellow kurta with small "
-                "orange embroidery, blue cotton pyjama trousers, brown sandals, "
-                "a red thread bracelet on his right wrist, short slightly chubby build"
-            ),
-        },
-        "mithu": {
-            "name": "मिट्ठू",
-            "role": "friend",
-            "catchphrase": "मिट्ठू सब जानता है!",
-            "description": (
-                "a small chatty rose-ringed parakeet with brilliant emerald green "
-                "feathers, a curved coral-red beak, a thin pink neck ring, bright "
-                "amber eyes, and one cheeky tuft of feathers sticking up on his head"
-            ),
-        },
-        "gullu": {
-            "name": "गुल्लू",
-            "role": "friend",
-            "catchphrase": "गुल्लू मदद करेगा!",
-            "description": (
-                "a gentle baby Indian elephant, soft dusty grey wrinkled skin, "
-                "oversized floppy ears, long curious trunk, kind hazel eyes with "
-                "long lashes, a small string of orange marigold flowers around his "
-                "neck, chubby and slightly clumsy"
-            ),
-        },
-        "pari": {
-            "name": "परी",
-            "role": "friend",
-            "catchphrase": "मुझे पता चल गया!",
-            "description": (
-                "a clever 6-year-old Indian girl, warm brown skin, two neat black "
-                "braids tied with red ribbons, wearing a "
-                "teal salwar kameez with tiny white polka dots and white canvas "
-                "shoes, always carrying a small cloth notebook"
-            ),
-        },
-        "bhola": {
-            "name": "भोला",
-            "role": "friend",
-            "catchphrase": "भौं भौं!",
-            "description": (
-                "a scruffy friendly Indian street dog, shaggy sandy golden-brown "
-                "fur, one ear permanently flopped over, a "
-                "long wagging tail, a faded blue collar, big trusting brown eyes"
-            ),
-        },
+    # Human sign-off over Telegram, between the cheap script and expensive Veo
+    # clips. No answer means no, because the run is unattended.
+    "approval": {
+        "enabled": True,
+        "timeout_seconds": 3600,
     },
     "story": {
-        "model": "claude-opus-4-6",
-        # Recurring friends featured per episode, on top of the host.
-        "friends_per_episode": 2,
+        "model": "claude-opus-5",
+        # A 38-shot script on a reasoning model takes several minutes.
+        "timeout_seconds": 900,
         # Regenerate when a shot comes back missing a field, which happens
         # occasionally on the 38-shot long format.
         "max_attempts": 3,
@@ -191,7 +126,6 @@ DEFAULTS: Dict[str, Any] = {
     "paths": {
         "work_dir": "build",
         "history_file": "data/history.json",
-        "cast_file": "data/cast.json",
     },
     "logging": {
         "level": "INFO",

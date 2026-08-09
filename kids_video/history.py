@@ -1,4 +1,4 @@
-"""Published-story history, used to guarantee stories never repeat.
+"""Published-video history, used to guarantee subjects never repeat.
 
 The file is committed back to the repo by the GitHub Actions workflow so the
 next run knows what has already aired.
@@ -25,12 +25,12 @@ class History:
                 self.entries = []
 
     def recent_summaries(self, limit: int = 40) -> List[str]:
-        """Short 'title - premise' lines to feed back into the story prompt."""
+        """Short 'title - subject' lines to feed back into the script prompt."""
         lines = []
         for entry in self.entries[-limit:]:
             title = entry.get("title", "")
-            premise = entry.get("premise", "")
-            lines.append(f"{title} — {premise}" if premise else title)
+            subject = entry.get("subject", "")
+            lines.append(f"{title} — {subject}" if subject else title)
         return [line for line in lines if line.strip()]
 
     def record(self, story: dict, video_format: str, youtube_id: str = "") -> None:
@@ -39,7 +39,7 @@ class History:
                 "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 "format": video_format,
                 "title": story.get("title", ""),
-                "premise": story.get("premise", ""),
+                "subject": story.get("subject", ""),
                 "content_type": story.get("content_type", ""),
                 "youtube_id": youtube_id,
             }

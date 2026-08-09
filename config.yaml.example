@@ -1,4 +1,4 @@
-# Kids Video Generator - non-secret settings.
+# Hindi Science Explainer Generator - non-secret settings.
 #
 # API keys are NOT stored here. They come from environment variables, which
 # always win over anything in this file:
@@ -13,27 +13,24 @@
 
 pipeline:
   # Python weekday(): Mon=0 .. Sun=6
-  # Current plan: Short daily + one 5-minute story on Sunday, ~$135/month.
-  # To scale up once retention data justifies it:
-  #   daily 5-min story  -> move `long` to long_days: [0,1,2,3,4,5,6]  (~$386/mo)
-  #   10-minute story    -> long.shot_count: 75                       (~$25/video)
+  # Current plan: Short daily + one 5-minute explainer on Sunday, ~$135/month.
+  #   daily 5-min video -> move `long` to long_days: [0,1,2,3,4,5,6]  (~$386/mo)
+  #   10-minute video   -> long.shot_count: 75                       (~$25/video)
   short_days: [0, 1, 2, 3, 4, 5, 6]   # a 60s Short every day
-  long_days: [6]                      # the 5-minute story on Sunday
-  # There is deliberately no topic list. Every episode is invented fresh by
-  # Claude from the day's content type, live trend signals and the published
-  # history, so stories never repeat.
+  long_days: [6]                      # the 5-minute explainer on Sunday
+  # There is deliberately no topic list. Each run picks a fresh subject inside
+  # the day's area, avoiding everything in data/history.json.
   content_rotation:
-    - adventure_story
-    - moral_story
-    - fun_facts
-    - folk_tale
-    - science_wonder
-    - friendship_story
-    - magical_story
+    - how_everyday_machines_work
+    - physics_and_energy
+    - space_and_astronomy
+    - technology_and_computing
+    - biology_and_the_human_body
+    - medical_science
+    - engineering_and_infrastructure
 
 short:
   shot_count: 8          # 8 x 8s = ~64 seconds
-  friends_per_episode: 1
   aspect_ratio: "9:16"
   veo_model: veo3_fast   # veo3_lite $0.175 | veo3_fast $0.325 | veo3 $1.275 per clip
 
@@ -43,37 +40,30 @@ long:
   veo_model: veo3_fast
 
 story:
-  model: claude-opus-4-6
-  friends_per_episode: 2   # recurring friends featured alongside the host
+  model: claude-opus-5
 
-# Character reference sheets are committed to the repo and served from
-# raw.githubusercontent.com, so the repository must be public. No API key.
-cast_images:
-  repo: your-github-user/your-repo
-  branch: main
-  dir: data/cast
+# Nothing is generated until you approve it in Telegram. The script itself
+# costs a few cents; approval happens before the dollars are spent.
+approval:
+  enabled: true
+  timeout_seconds: 3600   # no answer within an hour = skip, spend nothing
+
+# English subtitles burned into the frame. Sizes are pixels at 1080p.
+subtitles:
+  enabled: true
+  font: "DejaVu Sans"
 
 voice:
-  voice_id: "3AMU7jXQuQa3oRvRqUmb"   # Viraj; only used when rotation is empty
+  # One authoritative narrator. Preview options with:
+  #   python run_daily_pipeline.py voices
+  voice_id: "3AMU7jXQuQa3oRvRqUmb"   # Viraj
   model_id: eleven_multilingual_v2
-  # One narrator per weekday, Mon..Sun. Empty the list to pin voice_id instead.
-  # Library voices need a paid ElevenLabs plan.
-  rotation:
-    - "CNKl99QEbWm8RQ4D8GfC"   # Mon - Chutki, cute young kids storyteller
-    - "subIZc6skATBQ1Rbqpi7"   # Tue - Mahira J, expressive kids narrator
-    - "4RloeZf2FRvGiu4uoKOf"   # Wed - Riya, children storytelling
-    - "MIl0Flub6Sc9KSkX2A42"   # Thu - Mithi, moral kids stories
-    - "A2VREc2wjqtSZloENLHe"   # Fri - Suhana J, very young and expressive
-    - "psk8YLODv4ETdKheNwwz"   # Sat - Gappu, kids cartoon character
-    - "Rg5w9usCZCJdEdW501zk"   # Sun - Vidya, warm motherly (long story day)
+  rotation: []   # explainers keep one recognisable voice, no weekday rotation
 
 youtube:
   privacy_status: public
-  made_for_kids: true
-
-# The permanent cast lives in kids_video/config.py DEFAULTS and is pinned to
-# data/cast.json by `python run_daily_pipeline.py setup-cast`. Once a reference
-# sheet exists, do not edit a character's description or they will drift.
+  made_for_kids: false   # general audience, 13+; keeps comments and ads intact
+  category_id: "28"      # Science & Technology
 
 logging:
   level: INFO

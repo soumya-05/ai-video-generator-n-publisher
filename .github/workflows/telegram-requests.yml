@@ -1,37 +1,34 @@
-name: Daily Science Video Pipeline
+name: Telegram Topic Requests
+
+# Picks up topics sent to the bot as:
+#   /make how a washing machine works
+#   /make long CRISPR gene editing | focus on the delivery problem
+# The script is written first, sent back for approval, and only then rendered.
 
 on:
   schedule:
-    # 02:00 UTC = 07:30 IST
-    - cron: '0 2 * * *'
+    # Every 15 minutes. GitHub delays scheduled runs under load, so treat this
+    # as "within about half an hour", not a guarantee.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Plan the video without spending any credits'
+        description: 'Write the script without spending any credits'
         type: boolean
-        default: true
-      only:
-        description: 'Force one format'
-        type: choice
-        options: ['', 'short', 'long']
-        default: ''
+        default: false
 
 concurrency:
-  # Shared with telegram-requests.yml: two jobs polling Telegram at once would
-  # each consume updates meant for the other.
+  # Must not overlap with itself or the daily run, or two jobs would fight over
+  # the same Telegram update queue and each would swallow the other's messages.
   group: video-pipeline
   cancel-in-progress: false
 
 jobs:
-  generate-and-publish:
+  serve-requests:
     runs-on: ubuntu-latest
-    # A 38-shot explainer renders ~38 Veo clips, plus up to an hour waiting for
-    # the Telegram approval; give it room.
     timeout-minutes: 240
 
     permissions:
-      # The pipeline commits data/history.json back so tomorrow's script knows
-      # what has already aired.
       contents: write
 
     steps:
@@ -52,11 +49,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Run pipeline
+      - name: Serve requests
         run: |
-          ARGS="run"
+          ARGS="listen"
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          if [ -n "${{ inputs.only }}" ]; then ARGS="$ARGS --only ${{ inputs.only }}"; fi
           python run_daily_pipeline.py $ARGS
         env:
           PYTHONUNBUFFERED: 1
@@ -75,29 +71,17 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase
           git add data/history.json
-          git diff --staged --quiet || git commit -m "chore: record published episode [skip ci]"
+          git diff --staged --quiet || git commit -m "chore: record requested video [skip ci]"
           git push
 
-      - name: Upload logs and story artifacts
+      - name: Upload logs and script artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-logs
+          name: request-logs
           path: |
             logs/
             build/**/*.json
           retention-days: 7
-
-      # Covers failures the pipeline's own notifier cannot report, e.g. the job
-      # dying before Python starts.
-      - name: Notify failure
-        if: failure()
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          [ -z "$TELEGRAM_BOT_TOKEN" ] && exit 0
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-            -d chat_id="$TELEGRAM_CHAT_ID" \
-            -d text="GitHub Actions: daily pipeline failed. https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

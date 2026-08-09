@@ -1,75 +1,76 @@
-"""Original story generation via Claude.
+"""Original explainer script generation via Claude.
 
 There is no topic list anywhere in this project. Every run invents a brand new
-story, seeded by the day's content type, live trend signals, the season, and
+subject, seeded by the day's content type, live trend signals, the season, and
 the list of everything already published (so nothing ever repeats).
 
-The output schema deliberately mirrors the story-to-animation skills
-(characters.json / backgrounds.json / shots.json) so artifacts produced here
-can be inspected or hand-edited with those same skills.
+Each shot carries Hindi narration (spoken) and an English subtitle (burned in),
+plus a self-contained English prompt for the video model.
 """
 
 import json
 import re
-from typing import List
+from typing import List, Optional
 
 import requests
 
 API_URL = "https://api.anthropic.com/v1/messages"
 
-# Hindi narration at a kid-friendly pace is roughly 2.2 words/second.
-WORDS_PER_SHOT = 18
+# Hindi explainer narration sits around 2.7 words/second.
+WORDS_PER_SHOT = 22
+# An English subtitle has to be readable in 8 seconds on a phone.
+MAX_SUBTITLE_WORDS = 16
 
-SYSTEM_PROMPT = """You are a master storyteller for Indian children aged 4-8, \
-writing for a Hindi YouTube channel, and you also direct the 3D animation.
+SYSTEM_PROMPT = """You are a science and engineering explainer writer for a \
+Hindi YouTube channel, and you also direct the visuals. Think Veritasium or \
+Kurzgesagt, spoken in Hindi.
+
+WHAT THE CHANNEL IS
+How things actually work. Washing machines, jet engines, particle accelerators,
+MRI scanners, galaxies, CPUs, vaccines, the human kidney, lithium batteries,
+suspension bridges, CRISPR, black holes, refrigerators, semiconductors. Anything
+a curious adult has used or heard of but could not actually explain.
 
 HOW YOU WRITE
 
-Story craft:
-- One hero, one want, one obstacle. The child must be able to say what the hero
-  wants in five words. Everything in the story pushes toward or against that want.
-- The hero must try and FAIL at least once before succeeding. Easy wins are boring.
-- The solution comes from something small and specific planted earlier in the
-  story - a habit, an object, a friend's quirk. Never from luck or a grown-up
-  arriving to fix everything.
-- Raise a question in the child's head early and answer it late.
-- The moral is what the story already proves. Never bolt on a lesson the events
-  did not earn.
+Structure:
+- Open on a question the viewer cannot answer but feels they should. Never open
+  with a greeting, a channel name, or "today we will learn about".
+- Then answer it by building one mechanism, step by step, in the order the
+  physical thing works. Each shot is one link in that chain.
+- Every explanation bottoms out in something the viewer can already picture:
+  water, air, magnets, springs, marbles, traffic, heat. Analogy first, then the
+  real term.
+- End on the consequence - why this mattered, what it made possible, or the
+  strangest fact about it. Never end on a summary of what was just said.
 
-Originality:
-- Never retell Panchatantra, Aesop or Jataka classics: no thirsty crow, tortoise
-  and hare, lion and mouse, greedy dog, boy who cried wolf, ant and grasshopper.
-- Avoid the tired frames too: no "magic genie grants wishes", no "sharing is
-  caring" party, no "the small one saves everyone because they are small", no
-  dream-it-was-all-a-dream ending.
-- Take one concrete, slightly odd Indian detail (a lost tiffin lid, a kite stuck
-  on a transformer, a cow blocking the school gate, the last jalebi) and build
-  outward from it. Specific beats generic every time.
+Accuracy:
+- Everything you state must be factually correct. Numbers, dates, names and
+  magnitudes must be real. If you are not certain of a figure, describe the
+  scale in words instead of inventing a number.
+- Simplify freely, but never say something that is actually false. If a
+  simplification is a lie, flag the nuance in one clause instead.
+- No pseudoscience, no "scientists don't know why", no conspiracy framing.
 
-Setting:
-- Everyday India, seen at a child's eye level: mohallas, terrace lines of
-  drying clothes, mango trees, monsoon puddles, dadi's kitchen, thela vendors,
-  railway crossings, festival evenings, Indian animals and birds.
-
-Safety:
-- Gentle throughout. No violence, death, real fear, injury, or scary imagery.
-  Tension comes from worry and hope, never from threat. Problems are solved by
-  cleverness, courage or kindness.
-- The video model refuses any shot that reads as a child in physical danger,
-  even a happy one, and a refused shot wastes the whole episode. So never put a
-  child character near a well, a rooftop edge, deep or moving water, fire, a
-  stove, heights, machinery, tools with blades, or a rope tied to anyone. Keep
-  children on the ground doing safe things; give risky-looking actions to an
-  animal friend or a magical object instead.
+Tone:
+- Confident, curious, fast. You are explaining to a smart adult who simply has
+  not studied this, never to a child.
+- No filler, no "as we all know", no rhetorical padding. Every sentence carries
+  new information.
+- Awe is earned by the facts themselves, not by adjectives.
 
 Hindi narration:
-- Simple spoken Hindi (Devanagari) a 5-year-old understands. Short sentences.
-- Written for the ear, not the page: read it aloud in your head and keep the
-  rhythm bouncy. Sound words (धड़ाम, छपाक, सरसर, टप-टप) and repetition are good.
-- Use character dialogue inside the narration - it is far more alive than
-  reporting what happened.
-- Talk to the child sometimes ("देखो!", "अब क्या होगा?") but do not overdo it.
-- No English words except ones every Indian child already uses.
+- Natural spoken Hindi (Devanagari), the way an Indian science YouTuber actually
+  talks - conversational, not literary or textbook Hindi.
+- Keep the English technical term in Devanagari transliteration when that is
+  what people really say (इंजन, वैक्सीन, मैग्नेट, इलेक्ट्रॉन, प्रेशर). Forcing
+  an obscure Sanskrit equivalent sounds wrong and loses the viewer.
+- Short sentences. Written for the ear.
+
+English subtitles:
+- Every shot also gets a one-line English subtitle that conveys the same meaning
+  as the Hindi narration. It is a subtitle, not a transcript: tighten it, drop
+  filler, keep it readable at a glance.
 
 You always reply with a single valid JSON object and nothing else."""
 
@@ -91,22 +92,21 @@ class StoryGenerator:
         shot_count: int,
         signals: dict,
         avoid: List[str],
-        host,
-        friends: List,
+        requested: Optional[dict] = None,
     ) -> dict:
         self.logger.info(
-            "Generating %s story (%s, %d shots, cast: %s)",
+            "Generating %s script (%s, %d shots)%s",
             video_format,
             content_type,
             shot_count,
-            ", ".join([host.name] + [f.name for f in friends]),
+            f" on request: {requested['topic']}" if requested else "",
         )
         prompt = self._build_prompt(
-            content_type, video_format, shot_count, signals, avoid, host, friends
+            content_type, video_format, shot_count, signals, avoid, requested
         )
-        # A 38-shot story is a large JSON object and Claude occasionally drops a
-        # field from one shot. Another call costs cents, while letting it through
-        # wastes an entire render, so just ask again.
+        # A 38-shot script is a large JSON object and Claude occasionally drops
+        # a field from one shot. Another call costs cents, while letting it
+        # through wastes an entire render, so just ask again.
         attempts = self.config.get("story.max_attempts", 3)
         for attempt in range(1, attempts + 1):
             try:
@@ -114,23 +114,20 @@ class StoryGenerator:
                 story = _parse_json(raw)
                 story["content_type"] = content_type
                 story["format"] = video_format
-                _validate(story, shot_count, host.key)
+                _validate(story, shot_count)
                 break
             except StoryGenerationError as exc:
                 if attempt == attempts:
                     raise
                 self.logger.warning(
-                    "Story attempt %d/%d rejected (%s); regenerating",
+                    "Script attempt %d/%d rejected (%s); regenerating",
                     attempt, attempts, exc,
                 )
         self.logger.info(
-            "Story: %s (%d shots, %d characters)",
-            story.get("title", "?"),
-            len(story["shots"]),
-            len(story["characters"]),
+            "Script: %s (%d shots)", story.get("title", "?"), len(story["shots"])
         )
         # Narration longer than the shot has to be sped up to fit, and past
-        # ~1.3x it stops sounding like a storyteller to a small child.
+        # ~1.3x it stops sounding like a person talking.
         overlong = [
             (shot["shot_id"], words)
             for shot in story["shots"]
@@ -147,27 +144,39 @@ class StoryGenerator:
 
     def _call_claude(self, prompt: str) -> str:
         api_key = self.config.require_key("anthropic", "ANTHROPIC_API_KEY")
-        resp = requests.post(
-            API_URL,
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": self.model,
-                # A 38-shot story with a full veo_prompt per shot runs long.
-                "max_tokens": 32000,
-                "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=300,
-        )
+        try:
+            resp = requests.post(
+                API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    # A 38-shot script with a full veo_prompt per shot runs long.
+                    "max_tokens": 32000,
+                    "system": SYSTEM_PROMPT,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                # A 38-shot script on a reasoning model takes several minutes.
+                timeout=self.config.get("story.timeout_seconds", 900),
+            )
+        except requests.RequestException as exc:
+            # Raised as a StoryGenerationError so the retry loop covers a blip.
+            raise StoryGenerationError(f"Claude request failed: {exc}") from exc
         if resp.status_code >= 400:
             raise StoryGenerationError(
                 f"Claude API {resp.status_code}: {resp.text[:400]}"
             )
-        return resp.json()["content"][0]["text"]
+        # Newer models may lead with thinking blocks, so take the text ones.
+        blocks = resp.json().get("content", [])
+        text = "\n".join(b["text"] for b in blocks if b.get("type") == "text")
+        if not text:
+            raise StoryGenerationError(
+                f"No text in model reply: {json.dumps(blocks)[:300]}"
+            )
+        return text
 
     def _build_prompt(
         self,
@@ -176,150 +185,130 @@ class StoryGenerator:
         shot_count: int,
         signals: dict,
         avoid: List[str],
-        host,
-        friends: List,
+        requested: Optional[dict] = None,
     ) -> str:
         duration = shot_count * 8
         keywords = ", ".join(signals.get("trending_keywords") or []) or "(none available)"
         avoid_block = "\n".join(f"- {line}" for line in avoid) or "- (nothing yet)"
         aspect = self.config.get(f"{video_format}.aspect_ratio", "16:9")
 
-        cast_block = "\n\n".join(
-            f"  cast_key: {member.key}\n"
-            f"  Name: {member.name} ({'HOST' if member.is_host else 'recurring friend'})\n"
-            f"  Catchphrase: {member.catchphrase}\n"
-            f"  Locked appearance: {member.description}"
-            for member in [host, *friends]
-        )
-
         if video_format == "short":
             pacing = f"""SHAPE - 60-second YouTube Short ({shot_count} shots)
-A Short lives or dies in its first 2 seconds. Structure it like this:
-- Shot 1: {host.name} opens mid-action with a hook - a startling image or a
-  direct question to the child ("इस डिब्बे में क्या है?"). No slow greeting.
-- Shots 2-3: the problem lands, fast and visual.
-- Middle shots: ONE attempt that fails, then the clever turn.
-- Second-to-last shot: the payoff, the biggest visual moment of the video.
-- Final shot: {host.name} says the moral in one line and waves goodbye.
-Cut every word that is not doing work. One problem only. No sub-plots."""
+A Short is won or lost in the first 2 seconds.
+- Shot 1: the hook. One startling fact or one question, over the single most
+  striking image in the video. No introduction of any kind.
+- Shots 2-3: the setup - what the thing is and why the obvious answer is wrong.
+- Middle shots: the mechanism, one clean step per shot, no digressions.
+- Second-to-last shot: the payoff - the moment it clicks.
+- Final shot: the consequence or the strangest number, and stop.
+One idea only. Cut every word not carrying information. No sub-topics."""
         else:
-            pacing = f"""SHAPE - full 5-minute story ({shot_count} shots)
-Three acts, roughly:
-- ACT 1 (first ~1/5): {host.name} greets the children, then we meet the world
-  and learn exactly what the hero wants and what stands in the way. Plant the
-  small detail that will solve everything later - casually, so nobody notices.
-- ACT 2 (middle ~3/5): two or three attempts that fail, each failure worse and
-  more specific than the last. Stakes rise. Around the two-thirds mark the hero
-  hits a low point and nearly gives up.
-- ACT 3 (last ~1/5): the planted detail pays off, the hero solves it themselves,
-  and we get a warm resolution. {host.name} closes with the moral and a wave.
-Also required in a long story:
-- Give the hero one small flaw (impatient, scared of the dark, always hungry)
-  that they visibly overcome.
-- One running gag repeated three times, funnier each time.
-- One quiet beat where nobody speaks and the picture carries the feeling."""
+            pacing = f"""SHAPE - full 5-minute explainer ({shot_count} shots)
+- OPEN (first ~1/6): the hook question, then why the intuitive answer fails.
+  State plainly what the viewer will understand by the end.
+- BUILD (middle ~4/6): the mechanism assembled step by step, in physical order.
+  Introduce exactly one new idea per shot and use the previous shot's idea to
+  do it. Every ~6 shots, land a concrete number, a date, or a real-world
+  consequence so the viewer gets a reward for staying.
+- CLOSE (last ~1/6): zoom out - what this made possible, what it costs, what
+  breaks when it fails, or the open question at the frontier.
+Also required in a long video:
+- One counter-intuitive fact the viewer will want to repeat to someone.
+- One moment where you name what people commonly get wrong about this.
+- One quiet shot with a wide, slow visual where the narration says very little."""
 
-        return f"""Create a brand new Hindi story for Indian children aged 4-8.
+        if requested:
+            extra = (
+                f"\nThey also said: {requested['description']}"
+                if requested.get("description")
+                else ""
+            )
+            subject_block = f"""THE SUBJECT IS FIXED - DO NOT CHOOSE YOUR OWN
+The channel owner has asked for exactly this:
+
+  {requested['topic']}{extra}
+
+Cover that and nothing else. If it is too broad for {shot_count} shots, narrow
+it to the single most interesting mechanism inside it and explain that properly
+rather than skimming the whole field. Ignore the published list below except as
+a reminder of what you have already said, and the trending themes entirely."""
+        else:
+            subject_block = f"""CHOOSING THE SUBJECT
+Pick ONE specific mechanism, object or phenomenon - not a broad field. "How a
+washing machine gets clothes clean" is a subject; "washing machines" is not.
+"Why MRI needs liquid helium" is a subject; "medical imaging" is not. Narrow
+enough that {shot_count} shots can actually explain it end to end."""
+
+        return f"""Write a brand new Hindi explainer video script.
 
 CONTEXT
 - Content type for today: {content_type}
 - Date: {signals.get('date')} ({signals.get('weekday')}), season: {signals.get('season')}
-- Themes currently trending in Hindi kids content: {keywords}
-  Use these only as loose inspiration for mood or setting. Do NOT copy any title.
+- Themes currently trending in Hindi science and tech content: {keywords}
+  Use these only as loose inspiration for the subject area. Do NOT copy a title.
 - Video format: {video_format}, {shot_count} shots x 8 seconds = ~{duration} seconds
 - Aspect ratio: {aspect}
 
 {pacing}
 
-THE PERMANENT CAST - THESE NEVER CHANGE
-Our channel has recurring characters children already recognise. Their
-appearance is locked: you must reuse these exact descriptions, never restyle
-their clothes, colours, species or age.
+{subject_block}
 
-{cast_block}
-
-Rules for the cast:
-- {host.name} is the hero and appears in the FIRST and LAST shot, opening the
-  episode and closing it with the moral and a wave. Follow the SHAPE section
-  above for how the opening should feel.
-- {host.name} lives through the adventure in between and must solve it himself.
-- The recurring friends listed above must genuinely take part in this episode,
-  each with at least one moment that uses their personality, not just cameos.
-  A friend may help, but never hands the hero the answer.
-- Keep at most three characters in any single shot so the frame stays readable.
-- In every veo_prompt, copy each character's locked appearance almost word for
-  word so the render stays consistent.
-- Give every cast character in the JSON a "cast_key" exactly as shown above.
-
-ALREADY PUBLISHED - your story must be clearly different in premise, guest
-characters and setting from every one of these:
+ALREADY PUBLISHED - your subject must be clearly different from every one of
+these. Not a different angle on the same object: a different object.
 {avoid_block}
 
 BEFORE YOU WRITE
-Silently think up three different premises: one funny, one gently emotional, one
-built on a strange everyday object. Discard any that resemble a story you have
-told before or that a hundred other channels have already made. Write the boldest
-survivor. Do not show me this thinking - only the final JSON.
+Silently plan the chain of explanation end to end and check every link actually
+follows from the one before it. Discard any framing every science channel has
+already used. Do not show me this thinking - only the final JSON.
 
 REQUIREMENTS
-1. You may invent 0-2 NEW one-off guest characters for this story only (a
-   grumpy shopkeeper, a lost kitten, a talking kite...). Give them
-   "cast_key": null. They appear once and are never seen again.
-2. Invent 3-6 distinct locations. Never use the same background for more than
-   three shots in a row - the picture must keep changing.
-3. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
-4. narration_hi for each shot must be {WORDS_PER_SHOT - 3}-{WORDS_PER_SHOT + 4} Hindi
-   words. COUNT THE WORDS of every line before you finish and shorten any that
-   run over - {WORDS_PER_SHOT + 4} words is a hard limit, because longer lines get
-   sped up to fit the 8 seconds and stop sounding like a storyteller to a small
-   child. Devanagari script only. This is
-   narration a storyteller reads, not subtitles. Prefer dialogue over description
-   wherever a character can say it instead. Never simply narrate what the picture
-   already shows - the words should add what the picture cannot.
-5. Every shot must move the story. If a shot could be deleted without the child
-   noticing, replace it. Give each shot its own emotional beat in "mood", and let
-   consecutive shots contrast (loud then quiet, wide then close).
+1. Invent 4-8 distinct visual settings ("backgrounds"): the inside of the
+   machine, a laboratory, a factory floor, a cutaway cross-section, a microscopic
+   view, deep space, a schematic void. Never use the same background for more
+   than three shots in a row - the picture must keep changing.
+2. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
+3. narration_hi for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
+   Hindi words. COUNT THE WORDS of every line before you finish and shorten any
+   that run over - {WORDS_PER_SHOT + 4} words is a hard limit, because longer
+   lines get sped up to fit the 8 seconds. Devanagari script only.
+4. subtitle_en for each shot: the same meaning in English, at most
+   {MAX_SUBTITLE_WORDS} words, written to be read at a glance. No trailing
+   period needed. Never leave it empty.
+5. Every shot must advance the explanation. If a shot could be deleted without
+   the viewer losing a step, replace it. Give each shot its own beat in "mood".
 6. veo_prompt for each shot must be in ENGLISH and fully self-contained: never
-   reference character_id/bg_id, and re-describe every character's appearance in
-   full each time so the look stays consistent. Always start with
-   "Pixar-style 3D animation," and end with ", 8 seconds". Each one must state:
-   camera (slow dolly-in, low-angle tracking shot, wide establishing, close-up
-   on the face...), what the characters physically DO, their facial expression,
-   the setting, and the light. Vary the camera between shots - never three
-   identical framings in a row. Never ask for on-screen text, letters, words,
-   subtitles, logos or UI. Never describe speech or lip movement; the Hindi
-   narration is added separately.
-7. YouTube metadata in Hindi. The title must promise a story, not describe one -
-   curiosity or a question beats a summary. The description opens with a one-line
-   hook.
+   reference bg_id or an earlier shot. Always start with
+   "Cinematic photorealistic 3D visualisation," and end with ", 8 seconds".
+   Each one must state: camera (macro push-in, slow orbit, cutaway reveal,
+   exploded view rotating, wide establishing, extreme close-up), what is
+   physically happening and moving, the setting, and the lighting. Vary the
+   camera between shots - never three identical framings in a row.
+   NO human characters, no faces, no hands, no presenter, no cartoon styling.
+   The subject is the machine, the molecule, the organ or the cosmos itself.
+   Never ask for on-screen text, numbers, labels, arrows, letters, subtitles,
+   logos, watermarks or UI - the video model renders text as garbage and the
+   English subtitles are burned in separately.
+7. YouTube metadata in Hindi. The title must promise the answer to a question -
+   curiosity beats description. The description opens with a one-line hook.
 
 Return ONLY this JSON object:
 {{
-  "title": "Hindi story title, catchy, under 60 characters",
-  "premise": "one line English premise, used to avoid repeats later",
-  "moral": "one line Hindi moral",
-  "characters": [
-    {{"character_id": "char_001",
-      "cast_key": "{host.key}",
-      "name": "{host.name}",
-      "description": "the locked appearance from above, copied"}},
-    {{"character_id": "char_002",
-      "cast_key": null,
-      "name": "guest character Hindi name",
-      "description": "detailed English visual description: species or age, build, colours, exact clothing, distinguishing features"}}
-  ],
+  "title": "Hindi title, catchy, under 60 characters",
+  "subject": "one line English statement of exactly what is explained, used to avoid repeats later",
+  "takeaway": "one line Hindi statement of the single thing the viewer now understands",
   "backgrounds": [
     {{"bg_id": "bg_001",
-      "name": "location name",
-      "description": "detailed English visual description of the location, time of day, lighting"}}
+      "name": "setting name",
+      "description": "detailed English visual description of the setting, scale, materials, lighting"}}
   ],
   "shots": [
     {{"shot_id": "shot_001",
-      "characters": ["char_001"],
       "background": "bg_001",
-      "mood": "emotional beat",
+      "mood": "beat of this shot",
       "narration_hi": "Hindi narration for this 8 second shot",
-      "veo_prompt": "Pixar-style 3D animation, <camera>, <full character description doing action>, <setting>, <lighting and mood>, 8 seconds"}}
+      "subtitle_en": "English subtitle line, same meaning, short",
+      "veo_prompt": "Cinematic photorealistic 3D visualisation, <camera>, <what is happening and moving>, <setting>, <lighting>, 8 seconds"}}
   ],
   "youtube": {{
     "title": "Hindi YouTube title under 90 characters",
@@ -343,47 +332,21 @@ def _parse_json(raw: str) -> dict:
         raise StoryGenerationError(f"Malformed JSON from model: {exc}") from exc
 
 
-def _validate(story: dict, expected_shots: int, host_key: str) -> None:
-    for field in ("title", "shots", "characters", "backgrounds"):
+def _validate(story: dict, expected_shots: int) -> None:
+    for field in ("title", "shots", "backgrounds"):
         if not story.get(field):
-            raise StoryGenerationError(f"Story is missing required field '{field}'")
+            raise StoryGenerationError(f"Script is missing required field '{field}'")
 
-    char_ids = {c["character_id"] for c in story["characters"]}
     bg_ids = {b["bg_id"] for b in story["backgrounds"]}
-    # character_id -> cast_key, for characters that are permanent cast members.
-    cast_by_char = {
-        c["character_id"]: c["cast_key"]
-        for c in story["characters"]
-        if c.get("cast_key")
-    }
-    host_char_ids = [
-        char_id for char_id, key in cast_by_char.items() if key == host_key
-    ]
 
     for index, shot in enumerate(story["shots"], start=1):
         shot.setdefault("shot_id", f"shot_{index:03d}")
-        for field in ("narration_hi", "veo_prompt"):
+        for field in ("narration_hi", "subtitle_en", "veo_prompt"):
             if not shot.get(field):
                 raise StoryGenerationError(f"{shot['shot_id']} is missing '{field}'")
-        # Unknown ids would break reference lookup later.
-        shot["characters"] = [c for c in shot.get("characters", []) if c in char_ids]
+        # An unknown id would break the artifact cross-reference later.
         if shot.get("background") not in bg_ids:
             shot["background"] = story["backgrounds"][0]["bg_id"]
-
-    # The host must bookend every episode so the channel feels consistent.
-    if host_char_ids:
-        for position in (0, -1):
-            present = story["shots"][position]["characters"]
-            if host_char_ids[0] not in present:
-                present.insert(0, host_char_ids[0])
-
-    # Resolve which locked reference sheets each shot needs.
-    for shot in story["shots"]:
-        shot["cast_keys"] = [
-            cast_by_char[char_id]
-            for char_id in shot["characters"]
-            if char_id in cast_by_char
-        ]
 
     actual = len(story["shots"])
     if abs(actual - expected_shots) > max(2, expected_shots * 0.2):

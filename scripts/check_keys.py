@@ -81,27 +81,6 @@ def check_kie() -> None:
     report("KIE_API_TOKEN", False, "no credit endpoint answered; check manually")
 
 
-def check_cast_hosting() -> None:
-    """Veo fetches reference sheets over plain HTTP, so the repo must be public."""
-    import yaml
-
-    settings = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8")) or {}
-    repo = (settings.get("cast_images") or {}).get("repo", "")
-    if not repo:
-        return report("cast image hosting", False, "set cast_images.repo in config.yaml")
-
-    r = requests.get(f"https://api.github.com/repos/{repo}", timeout=TIMEOUT)
-    if r.status_code == 404:
-        return report(
-            "cast image hosting",
-            False,
-            f"{repo} is private or does not exist - Veo cannot fetch its raw URLs",
-        )
-    if r.status_code != 200:
-        return report("cast image hosting", False, f"GitHub API HTTP {r.status_code}")
-    report("cast image hosting", True, f"{repo} is public, raw URLs are fetchable")
-
-
 def check_elevenlabs() -> None:
     key = env("ELEVENLABS_API_KEY")
     if not key:
@@ -238,7 +217,7 @@ def check_telegram() -> None:
 def main() -> int:
     print("Validating credentials (no secret values are printed)\n")
     for check in (
-        check_anthropic, check_kie, check_cast_hosting, check_elevenlabs, check_voice_id,
+        check_anthropic, check_kie, check_elevenlabs, check_voice_id,
         check_youtube_data_key, check_youtube_oauth, check_telegram,
     ):
         try:

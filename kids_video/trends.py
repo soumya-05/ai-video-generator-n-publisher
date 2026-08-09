@@ -1,10 +1,9 @@
-"""Trend + seasonal signals used to seed original story generation.
+"""Trend + seasonal signals used to seed original script generation.
 
 Deliberately returns *keywords and themes*, never a ready-made topic string.
-The previous version fed raw YouTube titles straight into the script prompt,
-which produced garbage like:
-    "Don&#39;t be greedy #shorts#drawing#xiaolindrawing#cartoon#art#rat"
-Signals here are inspiration only; Claude writes an original premise from them.
+An earlier version fed raw YouTube titles straight into the script prompt, which
+produced garbage titles full of hashtag soup. Signals here are inspiration only;
+Claude picks the actual subject from them.
 """
 
 import html
@@ -16,23 +15,25 @@ from typing import Dict, List
 import requests
 
 SEARCH_QUERIES = {
-    "adventure_story": "hindi kids adventure story बच्चों की कहानी",
-    "moral_story": "hindi moral story for kids नैतिक कहानी",
-    "fun_facts": "hindi fun facts for kids रोचक तथ्य",
-    "folk_tale": "hindi folk tale panchatantra पंचतंत्र कहानी",
-    "science_wonder": "hindi science for kids विज्ञान बच्चों",
-    "friendship_story": "hindi friendship story for kids दोस्ती कहानी",
-    "magical_story": "hindi magical story for kids जादुई कहानी",
+    "how_everyday_machines_work": "how it works hindi मशीन कैसे काम करती है",
+    "physics_and_energy": "physics explained hindi भौतिकी ऊर्जा समझाया",
+    "space_and_astronomy": "space astronomy hindi अंतरिक्ष ब्रह्मांड विज्ञान",
+    "technology_and_computing": "technology explained hindi कंप्यूटर टेक्नोलॉजी",
+    "biology_and_the_human_body": "human body biology hindi शरीर जीव विज्ञान",
+    "medical_science": "medical science hindi चिकित्सा विज्ञान बीमारी",
+    "engineering_and_infrastructure": "engineering megastructure hindi इंजीनियरिंग निर्माण",
 }
 
-# Noise that shows up in nearly every kids-channel title and carries no meaning.
+# Noise that shows up in nearly every science-channel title and carries no
+# meaning on its own.
 STOPWORDS = {
-    "hindi", "kids", "story", "stories", "cartoon", "video", "videos", "shorts",
-    "short", "new", "best", "full", "episode", "part", "hd", "official", "song",
-    "songs", "rhymes", "rhyme", "for", "and", "the", "with", "of", "in", "ka",
-    "ki", "ke", "hai", "kahani", "kahaniya", "moral", "bacchon", "bachchon",
-    "कहानी", "कहानियां", "बच्चों", "बच्चे", "हिंदी", "नई", "वीडियो", "कार्टून",
-    "का", "की", "के", "है", "और", "में", "एक",
+    "hindi", "video", "videos", "shorts", "short", "new", "best", "full",
+    "episode", "part", "hd", "official", "explained", "explain", "facts",
+    "fact", "science", "how", "what", "why", "works", "work", "does", "did",
+    "for", "and", "the", "with", "of", "in", "on", "you", "your", "this",
+    "that", "ka", "ki", "ke", "hai", "kya", "kaise", "kyu", "kyun",
+    "विज्ञान", "हिंदी", "नई", "वीडियो", "क्या", "कैसे", "क्यों", "है", "हैं",
+    "का", "की", "के", "और", "में", "एक", "से", "को", "पर", "तथ्य",
 }
 
 SEASONS = {
@@ -83,12 +84,12 @@ class TrendSignals:
         }
 
     def _trending_keywords(self, content_type: str, limit: int = 12) -> List[str]:
-        """Top themes currently doing well in Hindi kids content on YouTube."""
+        """Top themes currently doing well in Hindi science content on YouTube."""
         if not self.api_key:
             self.logger.info("No YouTube Data API key; skipping trend signals")
             return []
 
-        query = SEARCH_QUERIES.get(content_type, "hindi kids story")
+        query = SEARCH_QUERIES.get(content_type, "science explained hindi")
         try:
             resp = requests.get(
                 "https://www.googleapis.com/youtube/v3/search",

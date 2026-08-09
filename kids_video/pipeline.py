@@ -1,13 +1,12 @@
 """Daily pipeline orchestrator.
 
 Flow per video:
-    trend signals -> original story (Claude) -> Hindi narration (ElevenLabs)
-    -> Pixar-style 8s clips (Veo 3.1, locked to the host reference sheet)
-    -> ffmpeg assembly -> YouTube
+    trend signals -> explainer script (Claude) -> Telegram approval
+    -> Hindi narration (ElevenLabs) -> photoreal 8s clips (Veo 3.1)
+    -> ffmpeg assembly with burned-in English subtitles -> YouTube
 
-Artifacts are written in the same shape the story-to-animation skills use
-(story.json / characters.json / backgrounds.json / shots.json), so any run can
-be inspected or hand-edited with those skills before assembly.
+The approval gate sits after the script (a few cents) and before Veo (dollars),
+so a subject you do not want costs almost nothing to reject.
 """
 
 import json
@@ -19,7 +18,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from . import assemble
-from .cast import CastManager
 from .history import History
 from .kie import KieClient, KieError, download
 from .notify import TelegramNotifier
@@ -57,7 +55,6 @@ class Pipeline:
         self.skip_upload = skip_upload
 
         self.kie = KieClient(config)
-        self.cast_manager = CastManager(config, self.kie)
         self.trends = TrendSignals(config)
         self.stories = StoryGenerator(config)
         self.narrator = HindiNarrator(config)
@@ -81,7 +78,7 @@ class Pipeline:
         return formats
 
     def content_type_for(self, today: date) -> str:
-        rotation = self.config.get("pipeline.content_rotation", ["moral_story"])
+        rotation = self.config.get("pipeline.content_rotation", ["science"])
         return rotation[today.weekday() % len(rotation)]
 
     # ── Entry point ───────────────────────────────────────────────────────
@@ -101,44 +98,75 @@ class Pipeline:
 
         results = []
         for video_format in formats:
-            try:
-                results.append(self._run_one(video_format, today))
-            except Exception as exc:  # noqa: BLE001 - one format must not kill the other
-                self.logger.error("%s video failed: %s", video_format, exc, exc_info=True)
-                self.notifier.failure(video_format, str(exc))
-                results.append(VideoResult(video_format, success=False, error=str(exc)))
+            results.append(self._guarded(video_format, today))
 
         self.history.save()
         return results
 
-    def _run_one(self, video_format: str, today: date) -> VideoResult:
-        work_dir = self.config.work_dir / f"{today.isoformat()}_{video_format}"
+    def serve_requests(self, today: Optional[date] = None) -> List[VideoResult]:
+        """Build whatever topics have been sent to the bot with /make.
+
+        Requests that arrive while an earlier one is waiting for approval are
+        picked up in the same run, so a burst of topics is handled in one go.
+        """
+        today = today or date.today()
+        queue = self.notifier.poll_requests()
+        if not queue:
+            self.logger.info("No pending /make requests")
+            return []
+
+        results = []
+        while queue:
+            request = queue.pop(0)
+            self.logger.info("=== request: %s ===", request["topic"])
+            results.append(
+                self._guarded(request["format"], today, request, index=len(results))
+            )
+            queue.extend(self.notifier.take_requests())
+
+        self.history.save()
+        return results
+
+    def _guarded(
+        self,
+        video_format: str,
+        today: date,
+        request: Optional[dict] = None,
+        index: int = 0,
+    ) -> VideoResult:
+        """Run one video, turning any failure into a reported result."""
+        try:
+            return self._run_one(video_format, today, request, index)
+        except Exception as exc:  # noqa: BLE001 - one video must not kill the rest
+            self.logger.error("%s video failed: %s", video_format, exc, exc_info=True)
+            self.notifier.failure(video_format, str(exc))
+            return VideoResult(video_format, success=False, error=str(exc))
+
+    def _run_one(
+        self,
+        video_format: str,
+        today: date,
+        request: Optional[dict] = None,
+        index: int = 0,
+    ) -> VideoResult:
+        suffix = f"_req{index}" if request else ""
+        work_dir = self.config.work_dir / f"{today.isoformat()}_{video_format}{suffix}"
         if work_dir.exists():
             shutil.rmtree(work_dir)
         work_dir.mkdir(parents=True)
 
-        # A dry run only writes a story, so config descriptions are enough;
-        # a real run needs the pinned reference sheets.
-        cast = (
-            self.cast_manager.from_config()
-            if self.dry_run
-            else self.cast_manager.require()
-        )
-        # Rotate which friends appear so every character gets screen time.
-        # A Short has no room for a crowd, so it carries fewer.
-        friends = cast.rotate_friends(
-            self.config.get(
-                f"{video_format}.friends_per_episode",
-                self.config.get("story.friends_per_episode", 2),
-            ),
-            offset=today.toordinal(),
-        )
         content_type = self.content_type_for(today)
         shot_count = self.config.get(f"{video_format}.shot_count", 8)
         aspect_ratio = self.config.get(f"{video_format}.aspect_ratio", "16:9")
         veo_model = self.config.get(f"{video_format}.veo_model", "veo3_fast")
+        style = self._subtitle_style(aspect_ratio)
 
-        # 1. Signals + original story
+        # Checked up front: a broken ffmpeg discovered after the clips are
+        # rendered would waste every dollar spent on them.
+        if not self.dry_run:
+            assemble.ensure_ffmpeg(need_subtitles=style is not None)
+
+        # 1. Signals + original script
         signals = self.trends.collect(content_type, today)
         story = self.stories.generate(
             content_type=content_type,
@@ -146,8 +174,7 @@ class Pipeline:
             shot_count=shot_count,
             signals=signals,
             avoid=self.history.recent_summaries(),
-            host=cast.host,
-            friends=friends,
+            requested=request,
         )
         self._write_artifacts(work_dir, story, signals)
 
@@ -163,12 +190,19 @@ class Pipeline:
                 video_format, success=True, story=story, estimated_cost=cost
             )
 
-        # 2. Narration and clips
-        assemble.ensure_ffmpeg()
+        # 2. Human approval, before anything expensive happens
+        if not self._approved(story, video_format, cost):
+            self.logger.info("%s video not approved; skipping", video_format)
+            return VideoResult(
+                video_format,
+                success=True,
+                story=story,
+                error="not approved",
+            )
+
+        # 3. Narration and clips
         narrations = self._render_narration(story, work_dir, today)
-        clips, failed = self._render_clips(
-            story, work_dir, cast, aspect_ratio, veo_model
-        )
+        clips, failed = self._render_clips(story, work_dir, aspect_ratio, veo_model)
 
         allowed = MAX_FAILED_SHOT_RATIO.get(video_format, 0.0) * len(story["shots"])
         if len(failed) > allowed:
@@ -177,11 +211,13 @@ class Pipeline:
                 f"({', '.join(failed[:5])}); aborting rather than publishing a broken video"
             )
 
-        # 3. Assemble
-        video_path = self._assemble(story, work_dir, clips, narrations, aspect_ratio)
+        # 4. Assemble
+        video_path = self._assemble(
+            story, work_dir, clips, narrations, aspect_ratio, style
+        )
         thumb = assemble.thumbnail(video_path, work_dir / "thumbnail.jpg")
 
-        # 4. Publish
+        # 5. Publish
         youtube_id = None
         if self.skip_upload:
             self.logger.info("Upload skipped; video is at %s", video_path)
@@ -209,17 +245,26 @@ class Pipeline:
     # ── Steps ─────────────────────────────────────────────────────────────
 
     def _write_artifacts(self, work_dir: Path, story: dict, signals: dict) -> None:
-        """Mirror the story-to-animation skills' file contract."""
+        """Dump the script so a failed run can be inspected or hand-edited."""
         def dump(name: str, payload: dict) -> None:
             (work_dir / name).write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
         dump("story.json", {**story, "signals": signals})
-        dump("characters.json", {"characters": story["characters"]})
         dump("backgrounds.json", {"backgrounds": story["backgrounds"]})
         dump("shots.json", {"shots": story["shots"]})
         self.logger.info("Artifacts written to %s", work_dir)
+
+    def _approved(self, story: dict, video_format: str, cost: float) -> bool:
+        if not self.config.get("approval.enabled", True):
+            return True
+        return self.notifier.request_approval(
+            story,
+            video_format,
+            cost,
+            self.config.get("approval.timeout_seconds", 3600),
+        )
 
     def _render_narration(
         self, story: dict, work_dir: Path, today: date
@@ -251,7 +296,7 @@ class Pipeline:
         return narrations
 
     def _render_clips(
-        self, story: dict, work_dir: Path, cast, aspect_ratio: str, veo_model: str
+        self, story: dict, work_dir: Path, aspect_ratio: str, veo_model: str
     ):
         self.logger.info(
             "Generating %d Veo clips (%s, %s)", len(story["shots"]), veo_model, aspect_ratio
@@ -269,9 +314,6 @@ class Pipeline:
         def task(shot: dict):
             def run():
                 shot_id = shot["shot_id"]
-                # Passing the locked reference sheets is what keeps recurring
-                # characters identical across every clip and every episode.
-                references = cast.reference_urls_for(shot.get("cast_keys", []))
                 for attempt in range(1, attempts + 1):
                     try:
                         url = self.kie.generate_clip(
@@ -281,7 +323,7 @@ class Pipeline:
                             resolution=self.config.get(
                                 f"{story['format']}.resolution", "1080p"
                             ),
-                            reference_urls=references,
+                            reference_urls=[],
                             label=shot_id,
                         )
                         path = download(url, work_dir / "clips" / f"{shot_id}.mp4")
@@ -312,6 +354,7 @@ class Pipeline:
         clips: Dict[str, Path],
         narrations: Dict[str, Path],
         aspect_ratio: str,
+        style: Optional[dict],
     ) -> Path:
         self.logger.info("Assembling %d segments", len(clips))
         segments = []
@@ -325,6 +368,8 @@ class Pipeline:
                     narration=narrations[shot_id],
                     destination=work_dir / "segments" / f"{shot_id}.mp4",
                     aspect_ratio=aspect_ratio,
+                    subtitle=shot.get("subtitle_en") if style else None,
+                    subtitle_style=style,
                 )
             )
 
@@ -334,6 +379,28 @@ class Pipeline:
             final, assemble.probe_duration(final), final.stat().st_size / 1e6,
         )
         return final
+
+    def _subtitle_style(self, aspect_ratio: str) -> Optional[dict]:
+        """Resolve the per-aspect-ratio subtitle style, or None if disabled."""
+        settings = self.config.get("subtitles", {})
+        if not settings.get("enabled", True):
+            return None
+
+        def pick(key: str, fallback):
+            value = settings.get(key, fallback)
+            # font_size and margin_v are keyed by aspect ratio, the rest are not.
+            return value.get(aspect_ratio, fallback) if isinstance(value, dict) else value
+
+        return {
+            "font": settings.get("font", "DejaVu Sans"),
+            "font_size": pick("font_size", 50),
+            "primary_colour": settings.get("primary_colour", "&H00FFFFFF"),
+            "outline_colour": settings.get("outline_colour", "&H00000000"),
+            "back_colour": settings.get("back_colour", "&H60000000"),
+            "outline": settings.get("outline", 6),
+            "margin_h": settings.get("margin_h", 80),
+            "margin_v": pick("margin_v", 80),
+        }
 
     # ── Metadata ──────────────────────────────────────────────────────────
 
@@ -347,9 +414,9 @@ class Pipeline:
         parts = [
             story.get("youtube", {}).get("description", ""),
             "",
-            f"💡 {story.get('moral', '')}" if story.get("moral") else "",
+            f"🔬 {story.get('takeaway', '')}" if story.get("takeaway") else "",
             "",
-            "#HindiKids #बच्चोंकीकहानी #KidsStory #HindiCartoon",
+            "#Science #Technology #HowItWorks #विज्ञान #ScienceInHindi",
         ]
         if video_format == "short":
             parts.append("#Shorts")
