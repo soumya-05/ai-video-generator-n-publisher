@@ -191,8 +191,9 @@ def _load_dotenv(path: Path) -> None:
     """Load KEY=value lines from a local .env into the environment.
 
     Convenience for running the CLI by hand; GitHub Actions injects real
-    secrets directly, and .env is gitignored. Never overrides an existing
-    variable, so an explicit export always wins.
+    secrets directly, and .env is gitignored. A non-empty exported variable
+    always wins, but a variable exported as an empty string does not, since
+    a blank export carries no value and would otherwise mask the file.
     """
     if not path.exists():
         return
@@ -201,7 +202,8 @@ def _load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+        if not os.environ.get(key.strip(), "").strip():
+            os.environ[key.strip()] = value.strip().strip("'\"")
 
 
 class Config:

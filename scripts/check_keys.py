@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """Validate every API key and the YouTube channel, without printing secrets.
 
-Each check makes the cheapest possible read-only call. Run locally with the
-env vars exported, or in GitHub Actions where the secrets are injected:
+Each check makes the cheapest possible read-only call. Run locally, where a
+local .env is read, or in GitHub Actions where the secrets are injected:
 
     python scripts/check_keys.py
 """
 
 import os
 import sys
+from pathlib import Path
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from kids_video.config import _load_dotenv  # noqa: E402
+
+_load_dotenv(Path(".env"))
 
 TIMEOUT = 30
 results = []
