@@ -39,6 +39,14 @@
       "subject": "How a particle accelerator uses an alternating electric field plus metal drift tubes to give a particle only forward pushes, never backward ones",
       "content_type": "engineering_and_infrastructure",
       "youtube_id": "FHrKMVPHSqY"
+    },
+    {
+      "date": "2026-08-09",
+      "format": "short",
+      "title": "How Your Touchpad Sees Your Finger",
+      "subject": "How a laptop touchpad locates a finger using a mutual-capacitance grid of row and column electrodes and charge-loss interpolation",
+      "content_type": "engineering_and_infrastructure",
+      "youtube_id": "x2dPYQRu6ug"
     }
   ]
 }
