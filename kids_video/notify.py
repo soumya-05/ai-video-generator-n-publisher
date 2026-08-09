@@ -52,7 +52,7 @@ class TelegramNotifier:
     def dry_run(self, story: dict, video_format: str, cost: float) -> None:
         shots: List[dict] = story.get("shots", [])
         preview = "\n".join(
-            f"  {shot['shot_id']}: {shot['subtitle_en'][:70]}" for shot in shots[:3]
+            f"  {shot['shot_id']}: {shot['narration'][:70]}" for shot in shots[:3]
         )
         self._send(
             f"🧪 *Dry run — no credits spent*\n\n"
@@ -217,6 +217,16 @@ class TelegramNotifier:
                 json=payload,
                 timeout=30,
             )
+            if not resp.ok:
+                # Generated titles and shot ids contain _ and *, which Telegram
+                # reads as unterminated Markdown. Losing the formatting is far
+                # better than losing the message.
+                payload.pop("parse_mode")
+                resp = requests.post(
+                    API.format(token=self.bot_token, method="sendMessage"),
+                    json=payload,
+                    timeout=30,
+                )
             if not resp.ok:
                 self.logger.warning("Telegram send failed: %s", resp.text[:200])
                 return None

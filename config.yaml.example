@@ -18,6 +18,7 @@ pipeline:
   #   10-minute video   -> long.shot_count: 75                       (~$25/video)
   short_days: [0, 1, 2, 3, 4, 5, 6]   # a 60s Short every day
   long_days: [6]                      # the 5-minute explainer on Sunday
+  language: en                        # narration language, worldwide audience
   # There is deliberately no topic list. Each run picks a fresh subject inside
   # the day's area, avoiding everything in data/history.json.
   content_rotation:
@@ -48,21 +49,23 @@ approval:
   enabled: true
   timeout_seconds: 3600   # no answer within an hour = skip, spend nothing
 
-# English subtitles burned into the frame. Turned off because the caption box
-# covered too much of the picture; the styling below still applies if it is
-# switched back on.
+# Captions burned into the frame: white text with a black outline, no box,
+# split into short cues so it reads like a caption track rather than a wall of
+# text. Sizes and margins are pixels at 1080p.
 subtitles:
-  enabled: false
+  enabled: true
   font: "DejaVu Sans"
+  words_per_cue: 5
 
 voice:
   # One authoritative narrator. Preview options with:
   #   python run_daily_pipeline.py voices
-  voice_id: "3AMU7jXQuQa3oRvRqUmb"   # Viraj
+  voice_id: "nPczCjzI2devNBz1zQrb"   # Brian - deep, resonant, neutral US accent
   model_id: eleven_multilingual_v2
   rotation: []   # explainers keep one recognisable voice, no weekday rotation
 
 youtube:
+  default_language: en
   privacy_status: public
   made_for_kids: false   # general audience, 13+; keeps comments and ads intact
   category_id: "28"      # Science & Technology

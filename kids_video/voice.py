@@ -1,4 +1,4 @@
-"""Hindi narration via ElevenLabs.
+"""Narration via ElevenLabs.
 
 Veo clips always come with their own generated audio (kie.ai exposes no toggle
 to disable it), so the assembler strips that track and replaces it with this
@@ -18,13 +18,14 @@ class VoiceError(RuntimeError):
     pass
 
 
-class HindiNarrator:
+class Narrator:
     def __init__(self, config):
         self.config = config
         self.logger = config.logger.getChild("voice")
         self.voice_id = config.get("voice.voice_id")
         self.model_id = config.get("voice.model_id", "eleven_multilingual_v2")
         self.output_format = config.get("voice.output_format", "mp3_44100_128")
+        self.language = config.get("pipeline.language", "en")
 
     @property
     def _headers(self) -> dict:
@@ -50,13 +51,13 @@ class HindiNarrator:
         label: str = "narration",
         voice_id: Optional[str] = None,
     ) -> Path:
-        """Render one line of Hindi narration to an mp3 file."""
+        """Render one line of narration to an mp3 file."""
         body = {
             "text": text,
             "model_id": self.model_id,
-            "language_code": "hi",
+            "language_code": self.language,
             # apply_language_text_normalization is deliberately not sent:
-            # ElevenLabs rejects it with a 400 for 'hi'.
+            # ElevenLabs rejects it with a 400 for some languages, including hi.
             "voice_settings": {
                 "stability": self.config.get("voice.stability", 0.45),
                 "similarity_boost": self.config.get("voice.similarity_boost", 0.75),
@@ -102,13 +103,13 @@ class HindiNarrator:
             for v in resp.json().get("voices", [])
         ]
 
-    def list_hindi_voices(self, limit: int = 30) -> List[dict]:
-        """Browse Hindi voices from the shared library, for picking voice_id."""
+    def list_library_voices(self, limit: int = 30) -> List[dict]:
+        """Browse the shared library in this channel's language, for picking voice_id."""
         resp = requests.get(
             f"{BASE_URL}/shared-voices",
             headers={"xi-api-key": self.config.require_key("elevenlabs", "ELEVENLABS_API_KEY")},
             params={
-                "language": "hi",
+                "language": self.language,
                 "use_cases": "narrative_story",
                 "sort": "trending",
                 "page_size": limit,

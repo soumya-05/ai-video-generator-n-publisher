@@ -2,7 +2,7 @@
 
 Flow per video:
     trend signals -> explainer script (Claude) -> Telegram approval
-    -> Hindi narration (ElevenLabs) -> photoreal 8s clips (Veo 3.1)
+    -> narration (ElevenLabs) -> stylised 8s clips (Veo 3.1)
     -> ffmpeg assembly with burned-in English subtitles -> YouTube
 
 The approval gate sits after the script (a few cents) and before Veo (dollars),
@@ -23,7 +23,7 @@ from .kie import KieClient, KieError, download
 from .notify import TelegramNotifier
 from .story import StoryGenerator
 from .trends import TrendSignals
-from .voice import HindiNarrator
+from .voice import Narrator
 from .youtube import YouTubeUploader
 
 # USD per 8-second 1080p clip, from kie.ai pricing (1 credit = $0.005).
@@ -57,7 +57,7 @@ class Pipeline:
         self.kie = KieClient(config)
         self.trends = TrendSignals(config)
         self.stories = StoryGenerator(config)
-        self.narrator = HindiNarrator(config)
+        self.narrator = Narrator(config)
         self.uploader = YouTubeUploader(config)
         self.notifier = TelegramNotifier(config)
         self.history = History(
@@ -271,7 +271,7 @@ class Pipeline:
     ) -> Dict[str, Path]:
         voice_id = self.narrator.voice_for(today)
         self.logger.info(
-            "Rendering Hindi narration for %d shots (voice %s)",
+            "Rendering narration for %d shots (voice %s)",
             len(story["shots"]), voice_id,
         )
         narrations: Dict[str, Path] = {}
@@ -280,7 +280,7 @@ class Pipeline:
         def task(shot: dict):
             def run():
                 path = self.narrator.narrate(
-                    shot["narration_hi"],
+                    shot["narration"],
                     work_dir / "narration" / f"{shot['shot_id']}.mp3",
                     label=shot["shot_id"],
                     voice_id=voice_id,
@@ -368,7 +368,7 @@ class Pipeline:
                     narration=narrations[shot_id],
                     destination=work_dir / "segments" / f"{shot_id}.mp4",
                     aspect_ratio=aspect_ratio,
-                    subtitle=shot.get("subtitle_en") if style else None,
+                    subtitle=shot.get("narration") if style else None,
                     subtitle_style=style,
                 )
             )
@@ -396,10 +396,13 @@ class Pipeline:
             "font_size": pick("font_size", 50),
             "primary_colour": settings.get("primary_colour", "&H00FFFFFF"),
             "outline_colour": settings.get("outline_colour", "&H00000000"),
-            "back_colour": settings.get("back_colour", "&H60000000"),
-            "outline": settings.get("outline", 6),
-            "margin_h": settings.get("margin_h", 80),
-            "margin_v": pick("margin_v", 80),
+            "back_colour": settings.get("back_colour", "&HFF000000"),
+            "border_style": settings.get("border_style", 1),
+            "outline": settings.get("outline", 3),
+            "shadow": settings.get("shadow", 1),
+            "margin_h": settings.get("margin_h", 120),
+            "margin_v": pick("margin_v", 300),
+            "words_per_cue": settings.get("words_per_cue", 5),
         }
 
     # ── Metadata ──────────────────────────────────────────────────────────
@@ -416,7 +419,7 @@ class Pipeline:
             "",
             f"🔬 {story.get('takeaway', '')}" if story.get("takeaway") else "",
             "",
-            "#Science #Technology #HowItWorks #विज्ञान #ScienceInHindi",
+            "#Science #Technology #HowItWorks #Explained #ScienceShorts",
         ]
         if video_format == "short":
             parts.append("#Shorts")
@@ -425,5 +428,5 @@ class Pipeline:
     def _estimate_cost(self, story: dict, veo_model: str) -> float:
         shots = story.get("shots", [])
         clips = len(shots) * CLIP_COST.get(veo_model, CLIP_COST["veo3_fast"])
-        chars = sum(len(shot.get("narration_hi", "")) for shot in shots)
+        chars = sum(len(shot.get("narration", "")) for shot in shots)
         return clips + (chars / 1000) * NARRATION_COST_PER_1K_CHARS

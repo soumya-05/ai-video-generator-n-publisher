@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""CLI for the Hindi science explainer video pipeline.
+"""CLI for the science explainer video pipeline.
 
     python run_daily_pipeline.py run --dry-run   # plan a video, spend nothing
     python run_daily_pipeline.py run             # today's scheduled videos
     python run_daily_pipeline.py run --only short --skip-upload
     python run_daily_pipeline.py listen          # build topics sent with /make
-    python run_daily_pipeline.py voices          # list Hindi ElevenLabs voices
+    python run_daily_pipeline.py voices          # list ElevenLabs narrator voices
 """
 
 import argparse
@@ -14,7 +14,7 @@ from datetime import date
 
 from kids_video.config import Config
 from kids_video.pipeline import Pipeline
-from kids_video.voice import HindiNarrator
+from kids_video.voice import Narrator
 
 
 def _report(config, results) -> int:
@@ -39,7 +39,7 @@ def cmd_listen(args, config) -> int:
 
 
 def cmd_voices(args, config) -> int:
-    narrator = HindiNarrator(config)
+    narrator = Narrator(config)
     configured = config.get("voice.voice_id")
 
     mine = narrator.my_voices()
@@ -55,8 +55,8 @@ def cmd_voices(args, config) -> int:
             "voice.voice_id in config.yaml to one of the ids above."
         )
 
-    print("\nHindi storyteller voices in the shared library (add before using):")
-    for voice in narrator.list_hindi_voices():
+    print("\nNarrator voices in the shared library (add before using):")
+    for voice in narrator.list_library_voices():
         print(f"  {voice['voice_id']}  {voice['name']}  ({voice.get('accent')})")
     return 0
 
@@ -85,7 +85,7 @@ def main() -> int:
                         help="build the video but do not publish to YouTube")
     listen.set_defaults(func=cmd_listen)
 
-    voices = sub.add_parser("voices", help="list Hindi ElevenLabs voices")
+    voices = sub.add_parser("voices", help="list ElevenLabs narrator voices")
     voices.set_defaults(func=cmd_voices)
 
     args = parser.parse_args()

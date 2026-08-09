@@ -1,4 +1,4 @@
-"""Automated Hindi kids' video pipeline for YouTube."""
+"""Automated science explainer video pipeline for YouTube."""
 
 from .config import Config
 from .pipeline import Pipeline

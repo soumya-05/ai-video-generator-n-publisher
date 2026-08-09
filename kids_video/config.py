@@ -32,7 +32,7 @@ DEFAULTS: Dict[str, Any] = {
         # they run weekly; Shorts run every day.
         "short_days": [0, 1, 2, 3, 4, 5, 6],
         "long_days": [6],  # Sunday (Python weekday(): Mon=0 .. Sun=6)
-        "language": "hi",
+        "language": "en",
         "target_audience": "curious adults",
         # Subject area rotation, indexed by Python weekday(). These are areas,
         # not topics: Claude picks a specific mechanism inside one each run.
@@ -76,7 +76,7 @@ DEFAULTS: Dict[str, Any] = {
         # A single authoritative documentary narrator. An explainer channel
         # builds trust through a recognisable voice, so unlike a story channel
         # there is deliberately no per-weekday rotation.
-        "voice_id": "3AMU7jXQuQa3oRvRqUmb",  # Viraj
+        "voice_id": "nPczCjzI2devNBz1zQrb",  # Brian - deep, resonant, neutral US
         "rotation": [],
         "output_format": "mp3_44100_128",
         # Lower style and higher stability than storytelling: an explainer
@@ -86,8 +86,8 @@ DEFAULTS: Dict[str, Any] = {
         "style": 0.2,
         "speed": 1.0,
     },
-    # English subtitles burned into the picture. Shorts do not reliably surface
-    # a CC track, so the text has to be part of the frame. Sizes and margins are
+    # Captions burned into the picture. Shorts do not reliably surface a CC
+    # track, so the text has to be part of the frame. Sizes and margins are
     # literal pixels at the target resolution (see assemble._write_ass).
     "subtitles": {
         "enabled": True,
@@ -97,17 +97,24 @@ DEFAULTS: Dict[str, Any] = {
         # ASS colours are &HAABBGGRR - alpha first, then blue/green/red.
         "primary_colour": "&H00FFFFFF",  # opaque white
         "outline_colour": "&H00000000",
-        "back_colour": "&H60000000",  # ~62% opaque black box
-        "outline": 6,  # box padding when BorderStyle is 3
-        "margin_h": 80,
-        # Lifted well clear of the Shorts UI overlay at the bottom of the frame.
-        "margin_v": {"9:16": 420, "16:9": 80, "1:1": 120},
+        "back_colour": "&HFF000000",  # fully transparent: no box behind the text
+        # 1 = outline + drop shadow, so only the letters sit over the picture.
+        # 3 would draw an opaque box and hide a third of the frame.
+        "border_style": 1,
+        "outline": 3,   # black stroke width around each glyph
+        "shadow": 1,
+        "margin_h": 120,
+        # Clear of the Shorts UI overlay, but low in frame like a caption track.
+        "margin_v": {"9:16": 300, "16:9": 70, "1:1": 100},
+        # A whole 8-second line at once is a wall of text, so each shot's
+        # narration is split into short cues timed across the clip.
+        "words_per_cue": 5,
     },
     "youtube": {
         "category_id": "28",  # Science & Technology
         "privacy_status": "public",
         "made_for_kids": False,
-        "default_language": "hi",
+        "default_language": "en",
     },
     # Human sign-off over Telegram, between the cheap script and expensive Veo
     # clips. No answer means no, because the run is unattended.

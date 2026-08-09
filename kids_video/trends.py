@@ -14,33 +14,39 @@ from typing import Dict, List
 
 import requests
 
+# Phrased the way English-language channels title their videos. `relevanceLanguage`
+# is only a weak hint, so a query like "how it works explained" comes back full of
+# transliterated Hindi ("kaise kaam karti hai") and poisons the signal.
 SEARCH_QUERIES = {
-    "how_everyday_machines_work": "how it works hindi मशीन कैसे काम करती है",
-    "physics_and_energy": "physics explained hindi भौतिकी ऊर्जा समझाया",
-    "space_and_astronomy": "space astronomy hindi अंतरिक्ष ब्रह्मांड विज्ञान",
-    "technology_and_computing": "technology explained hindi कंप्यूटर टेक्नोलॉजी",
-    "biology_and_the_human_body": "human body biology hindi शरीर जीव विज्ञान",
-    "medical_science": "medical science hindi चिकित्सा विज्ञान बीमारी",
-    "engineering_and_infrastructure": "engineering megastructure hindi इंजीनियरिंग निर्माण",
+    "how_everyday_machines_work": "how machines work engineering breakdown",
+    "physics_and_energy": "physics of energy documentary breakdown",
+    "space_and_astronomy": "astronomy universe documentary breakdown",
+    "technology_and_computing": "computer chip technology documentary breakdown",
+    "biology_and_the_human_body": "human anatomy documentary breakdown",
+    "medical_science": "medical science documentary breakdown",
+    "engineering_and_infrastructure": "megastructure engineering documentary breakdown",
 }
 
 # Noise that shows up in nearly every science-channel title and carries no
-# meaning on its own.
+# meaning on its own, plus the query words themselves, which otherwise rank top
+# in their own results.
 STOPWORDS = {
-    "hindi", "video", "videos", "shorts", "short", "new", "best", "full",
-    "episode", "part", "hd", "official", "explained", "explain", "facts",
-    "fact", "science", "how", "what", "why", "works", "work", "does", "did",
-    "for", "and", "the", "with", "of", "in", "on", "you", "your", "this",
-    "that", "ka", "ki", "ke", "hai", "kya", "kaise", "kyu", "kyun",
-    "विज्ञान", "हिंदी", "नई", "वीडियो", "क्या", "कैसे", "क्यों", "है", "हैं",
-    "का", "की", "के", "और", "में", "एक", "से", "को", "पर", "तथ्य",
+    "breakdown", "documentary", "engineering", "physics", "astronomy",
+    "anatomy", "medical", "technology", "computer", "chip", "megastructure",
+    "universe", "human", "body", "energy", "space", "machine", "machines",
+    "video", "videos", "shorts", "short", "new", "best", "full", "episode",
+    "part", "hd", "official", "explained", "explain", "explaining", "facts",
+    "fact", "science", "how", "what", "why", "works", "work", "working",
+    "does", "did", "is", "are", "was", "it", "its", "actually", "really",
+    "for", "and", "the", "with", "of", "in", "on", "to", "a", "an", "you",
+    "your", "this", "that", "from", "about", "inside", "made", "make",
 }
 
 SEASONS = {
-    1: "winter (सर्दी)", 2: "late winter", 3: "spring (बसंत)",
-    4: "spring turning hot", 5: "summer (गर्मी)", 6: "early monsoon",
-    7: "monsoon (बरसात)", 8: "monsoon", 9: "post-monsoon",
-    10: "autumn (शरद)", 11: "early winter", 12: "winter (सर्दी)",
+    1: "winter", 2: "late winter", 3: "early spring",
+    4: "spring", 5: "late spring", 6: "early summer",
+    7: "summer", 8: "late summer", 9: "early autumn",
+    10: "autumn", 11: "late autumn", 12: "winter",
 }
 
 
@@ -84,20 +90,19 @@ class TrendSignals:
         }
 
     def _trending_keywords(self, content_type: str, limit: int = 12) -> List[str]:
-        """Top themes currently doing well in Hindi science content on YouTube."""
+        """Top themes currently doing well in science content on YouTube."""
         if not self.api_key:
             self.logger.info("No YouTube Data API key; skipping trend signals")
             return []
 
-        query = SEARCH_QUERIES.get(content_type, "science explained hindi")
+        query = SEARCH_QUERIES.get(content_type, "science explained")
         try:
             resp = requests.get(
                 "https://www.googleapis.com/youtube/v3/search",
                 params={
                     "part": "snippet",
                     "q": query,
-                    "regionCode": "IN",
-                    "relevanceLanguage": "hi",
+                    "relevanceLanguage": "en",
                     "type": "video",
                     "order": "viewCount",
                     "publishedAfter": "2026-01-01T00:00:00Z",

@@ -1,4 +1,4 @@
-"""FFmpeg assembly: swap in Hindi narration, burn in English subtitles, then
+"""FFmpeg assembly: swap in the narration, burn in captions, then
 stitch shots into one video.
 
 Every segment is re-encoded with identical parameters so the final concat can
@@ -95,7 +95,7 @@ def build_segment(
     subtitle: Optional[str] = None,
     subtitle_style: Optional[dict] = None,
 ) -> Path:
-    """Replace a Veo clip's own audio with Hindi narration, matching durations."""
+    """Replace a Veo clip's own audio with the narration, matching durations."""
     width, height = TARGET_SIZE.get(aspect_ratio, TARGET_SIZE["16:9"])
     clip_seconds = probe_duration(clip)
     narration_seconds = probe_duration(narration)
@@ -159,18 +159,52 @@ def _ass_time(seconds: float) -> str:
     return f"{int(hours)}:{int(minutes):02d}:{secs:05.2f}"
 
 
+def _split_cues(text: str, seconds: float, words_per_cue: int) -> List[tuple]:
+    """Break one shot's narration into short cues spread across the clip.
+
+    Showing a whole 8-second line at once is a wall of text. Words are a good
+    enough proxy for speaking time here, so each cue is given a share of the
+    clip proportional to its word count.
+    """
+    words = text.split()
+    if not words:
+        return []
+    chunks = [
+        " ".join(words[i : i + words_per_cue])
+        for i in range(0, len(words), words_per_cue)
+    ]
+    cues, elapsed = [], 0.0
+    for chunk in chunks:
+        span = seconds * len(chunk.split()) / len(words)
+        cues.append((elapsed, elapsed + span, chunk))
+        elapsed += span
+    # Absorb rounding into the last cue so it runs to the end of the clip.
+    start, _, chunk = cues[-1]
+    cues[-1] = (start, seconds, chunk)
+    return cues
+
+
 def _write_ass(
     text: str, seconds: float, destination: Path, width: int, height: int, style: dict
 ) -> Path:
-    """Write a one-cue ASS subtitle file sized in real pixels.
+    """Write an ASS subtitle file sized in real pixels.
 
     An SRT would be simpler, but ffmpeg gives SRT a fixed 384x288 canvas and
     then scales it, so the on-screen size depends on the video resolution in a
     way that is hard to reason about. Declaring PlayRes as the actual frame size
     means Fontsize and MarginV below are literal pixels.
+
+    BorderStyle 1 draws an outline and shadow around the glyphs only. Style 3
+    would paint an opaque box from BackColour, which covers a large part of a
+    vertical frame.
     """
-    # \N is the ASS hard line break; libass wraps the rest on its own.
-    body = text.strip().replace("\n", r"\N")
+    cues = _split_cues(text, seconds, style.get("words_per_cue", 5))
+    events = "\n".join(
+        f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Default,,0,0,0,,"
+        # \N is the ASS hard line break; libass wraps the rest on its own.
+        + chunk.replace("\n", r"\N")
+        for start, end, chunk in cues
+    )
     content = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -182,13 +216,14 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Default,{style.get('font', 'DejaVu Sans')},{style.get('font_size', 52)},\
 {style.get('primary_colour', '&H00FFFFFF')},&H000000FF,\
-{style.get('outline_colour', '&H00000000')},{style.get('back_colour', '&H80000000')},\
--1,0,0,0,100,100,0,0,3,{style.get('outline', 6)},0,2,\
-{style.get('margin_h', 80)},{style.get('margin_h', 80)},{style.get('margin_v', 90)},1
+{style.get('outline_colour', '&H00000000')},{style.get('back_colour', '&HFF000000')},\
+-1,0,0,0,100,100,0,0,{style.get('border_style', 1)},{style.get('outline', 3)},\
+{style.get('shadow', 1)},2,\
+{style.get('margin_h', 120)},{style.get('margin_h', 120)},{style.get('margin_v', 300)},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,{_ass_time(0)},{_ass_time(seconds)},Default,,0,0,0,,{body}
+{events}
 """
     destination.write_text(content, encoding="utf-8")
     return destination

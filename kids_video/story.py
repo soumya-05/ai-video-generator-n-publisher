@@ -4,8 +4,8 @@ There is no topic list anywhere in this project. Every run invents a brand new
 subject, seeded by the day's content type, live trend signals, the season, and
 the list of everything already published (so nothing ever repeats).
 
-Each shot carries Hindi narration (spoken) and an English subtitle (burned in),
-plus a self-contained English prompt for the video model.
+Each shot carries one line of spoken English narration plus a self-contained
+prompt for the video model.
 """
 
 import json
@@ -16,14 +16,20 @@ import requests
 
 API_URL = "https://api.anthropic.com/v1/messages"
 
-# Hindi explainer narration sits around 2.7 words/second.
-WORDS_PER_SHOT = 22
-# An English subtitle has to be readable in 8 seconds on a phone.
-MAX_SUBTITLE_WORDS = 16
+# Narration for this style sits around 2.6 words/second.
+WORDS_PER_SHOT = 21
+
+# Prefixed to every veo_prompt, unchanged. The shots are rendered as separate
+# 8-second clips with no shared context, so an identical opening phrase is the
+# only thing making them look like one continuous video.
+VISUAL_STYLE = (
+    "Clean minimal 3D animation, simple smooth matte shapes, flat muted colour "
+    "palette, soft even lighting, plain uncluttered dark background, no text"
+)
 
 SYSTEM_PROMPT = """You are a science and engineering explainer writer for a \
-Hindi YouTube channel, and you also direct the visuals. Think Veritasium or \
-Kurzgesagt, spoken in Hindi.
+YouTube channel with a worldwide audience, and you also direct the visuals. \
+Think Veritasium or Kurzgesagt.
 
 WHAT THE CHANNEL IS
 How things actually work. Washing machines, jet engines, particle accelerators,
@@ -59,18 +65,12 @@ Tone:
   new information.
 - Awe is earned by the facts themselves, not by adjectives.
 
-Hindi narration:
-- Natural spoken Hindi (Devanagari), the way an Indian science YouTuber actually
-  talks - conversational, not literary or textbook Hindi.
-- Keep the English technical term in Devanagari transliteration when that is
-  what people really say (इंजन, वैक्सीन, मैग्नेट, इलेक्ट्रॉन, प्रेशर). Forcing
-  an obscure Sanskrit equivalent sounds wrong and loses the viewer.
-- Short sentences. Written for the ear.
-
-English subtitles:
-- Every shot also gets a one-line English subtitle that conveys the same meaning
-  as the Hindi narration. It is a subtitle, not a transcript: tighten it, drop
-  filler, keep it readable at a glance.
+Language:
+- Plain international English, written for the ear and read aloud by a narrator.
+- The audience is worldwide and most of them are not native speakers. Use common
+  words, short sentences, active voice. No idioms, no slang, no wordplay, no
+  culture-specific references, no imperial-only units.
+- Define a technical term the moment you use it, in the same sentence.
 
 You always reply with a single valid JSON object and nothing else."""
 
@@ -131,7 +131,7 @@ class StoryGenerator:
         overlong = [
             (shot["shot_id"], words)
             for shot in story["shots"]
-            if (words := len(shot["narration_hi"].split())) > WORDS_PER_SHOT + 4
+            if (words := len(shot["narration"].split())) > WORDS_PER_SHOT + 4
         ]
         if overlong:
             self.logger.warning(
@@ -239,12 +239,12 @@ washing machine gets clothes clean" is a subject; "washing machines" is not.
 "Why MRI needs liquid helium" is a subject; "medical imaging" is not. Narrow
 enough that {shot_count} shots can actually explain it end to end."""
 
-        return f"""Write a brand new Hindi explainer video script.
+        return f"""Write a brand new explainer video script.
 
 CONTEXT
 - Content type for today: {content_type}
 - Date: {signals.get('date')} ({signals.get('weekday')}), season: {signals.get('season')}
-- Themes currently trending in Hindi science and tech content: {keywords}
+- Themes currently trending in science and tech content: {keywords}
   Use these only as loose inspiration for the subject area. Do NOT copy a title.
 - Video format: {video_format}, {shot_count} shots x 8 seconds = ~{duration} seconds
 - Aspect ratio: {aspect}
@@ -263,77 +263,62 @@ follows from the one before it. Discard any framing every science channel has
 already used. Do not show me this thinking - only the final JSON.
 
 REQUIREMENTS
-1. Invent 4-8 distinct visual settings ("backgrounds"): the inside of the
-   machine, a workshop bench, a factory floor, a cutaway cross-section, a
-   microscopic view, deep space. Every one must be a real physical place with
-   real materials - never an abstract void, floating diagram or schematic
-   space, which always reads as cheap CGI. Never use the same background for
-   more than three shots in a row - the picture must keep changing.
+1. Invent 4-8 distinct visual settings ("backgrounds"): a clean cutaway of the
+   machine, a simplified cross-section, a single object on an empty backdrop, a
+   stylised microscopic view, a simplified planetary or cosmic view. Keep every
+   setting uncluttered - one clear subject, nothing decorative behind it. Never
+   use the same background for more than three shots in a row.
 2. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
-3. narration_hi for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
-   Hindi words. COUNT THE WORDS of every line before you finish and shorten any
-   that run over - {WORDS_PER_SHOT + 4} words is a hard limit, because longer
-   lines get sped up to fit the 8 seconds. Devanagari script only.
-4. subtitle_en for each shot: the same meaning in English, at most
-   {MAX_SUBTITLE_WORDS} words, written to be read at a glance. No trailing
-   period needed. Never leave it empty.
-5. Every shot must advance the explanation. If a shot could be deleted without
+3. narration for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
+   English words. COUNT THE WORDS of every line before you finish and shorten
+   any that run over - {WORDS_PER_SHOT + 4} words is a hard limit, because
+   longer lines get sped up to fit the 8 seconds.
+4. Every shot must advance the explanation. If a shot could be deleted without
    the viewer losing a step, replace it. Give each shot its own beat in "mood".
-6. veo_prompt for each shot must be in ENGLISH and fully self-contained: never
-   reference bg_id or an earlier shot. End every prompt with ", 8 seconds".
-   Write it as a DESCRIPTION OF REAL FOOTAGE, never as a description of a
-   render. Begin each prompt with one of:
-     "Photorealistic live-action macro cinematography," - for anything that
-       physically exists at human scale: machines, parts, tools, materials.
-     "High-end scientific documentary footage," - for what a real camera cannot
-       reach: microscopic, molecular, internal anatomy, deep space.
-   Then state, in this order:
-     a) camera and lens, in real equipment terms - "85mm macro lens, slow
-        push-in, shallow depth of field", "35mm wide, slow dolly left",
-        "probe lens creeping between components", "locked-off tripod, slow
-        orbit". Vary it between shots; never three identical framings in a row.
-     b) exactly what is moving, and how fast. Something must move in every
-        shot - rotation, flow, vibration, heat shimmer, a part sliding home.
-     c) the setting, with materials described the way real objects look:
-        brushed aluminium with fine scratches, a smear of grease, dust in the
-        air, condensation, worn paint, fingerprints. Perfect clean surfaces are
-        what makes a shot look fake.
-     d) lighting as a real setup - "single hard key from a window, deep
-        shadows", "soft overcast light", "practical LED glow from inside the
-        housing". Never "even studio lighting" on everything.
-     e) finish with realism anchors: "natural motion blur, subtle handheld
-        micro-movement, fine film grain, shot on ARRI Alexa, photorealistic,
-        not a 3D render, not an illustration, not CGI-looking".
-   NO human characters, no faces, no hands, no presenter, no cartoon styling,
-   no glossy corporate-explainer look. The subject is the machine, the
-   molecule, the organ or the cosmos itself.
+5. veo_prompt for each shot must be fully self-contained: never reference bg_id
+   or an earlier shot. Every prompt begins with
+   "{VISUAL_STYLE}," and ends with ", 8 seconds".
+   THE STYLE IS FIXED AND IDENTICAL IN EVERY SHOT - the shots are rendered
+   separately and only look like one video if that opening phrase never varies.
+   Between the style and the ending, state:
+     a) the subject, described as a simple clean form: smooth matte surfaces,
+        clear silhouette, a few flat colours, no fine detail, no clutter, no
+        surface wear, no text on the object.
+     b) exactly one thing that moves, slowly. Rotation, a part sliding, liquid
+        flowing, a cutaway opening, a slow zoom. One motion only - busy shots
+        read as messy at this scale.
+     c) the camera as a simple move: "slow push-in", "slow orbit", "static wide
+        shot", "gentle pan left", "cutaway slowly opening". Vary it between
+        shots; never three identical moves in a row.
+   NO human characters, no faces, no hands, no presenter. No photorealism, no
+   film grain, no lens flares, no dust, no scratches, no gritty textures.
    Never ask for on-screen text, numbers, labels, arrows, letters, subtitles,
    logos, watermarks or UI - the video model renders text as garbage.
-7. YouTube metadata in Hindi. The title must promise the answer to a question -
-   curiosity beats description. The description opens with a one-line hook.
+6. YouTube metadata in English, written for a worldwide audience. The title must
+   promise the answer to a question - curiosity beats description. The
+   description opens with a one-line hook.
 
 Return ONLY this JSON object:
 {{
-  "title": "Hindi title, catchy, under 60 characters",
-  "subject": "one line English statement of exactly what is explained, used to avoid repeats later",
-  "takeaway": "one line Hindi statement of the single thing the viewer now understands",
+  "title": "catchy title, under 60 characters",
+  "subject": "one line statement of exactly what is explained, used to avoid repeats later",
+  "takeaway": "one line statement of the single thing the viewer now understands",
   "backgrounds": [
     {{"bg_id": "bg_001",
       "name": "setting name",
-      "description": "detailed English visual description of the setting, scale, materials, lighting"}}
+      "description": "visual description of the setting: the subject, its scale, the simple shapes it is built from"}}
   ],
   "shots": [
     {{"shot_id": "shot_001",
       "background": "bg_001",
       "mood": "beat of this shot",
-      "narration_hi": "Hindi narration for this 8 second shot",
-      "subtitle_en": "English subtitle line, same meaning, short",
-      "veo_prompt": "Photorealistic live-action macro cinematography, <lens and camera move>, <what is moving>, <setting with worn real materials>, <real lighting setup>, natural motion blur, subtle handheld micro-movement, fine film grain, shot on ARRI Alexa, photorealistic, not a 3D render, not an illustration, 8 seconds"}}
+      "narration": "spoken English narration for this 8 second shot",
+      "veo_prompt": "{VISUAL_STYLE}, <subject as simple clean forms>, <the one thing that moves>, <camera move>, 8 seconds"}}
   ],
   "youtube": {{
-    "title": "Hindi YouTube title under 90 characters",
-    "description": "Hindi description, 3-4 lines, with a hook first",
-    "tags": ["10-14 mixed Hindi and English tags"]
+    "title": "YouTube title under 90 characters",
+    "description": "description, 3-4 lines, with a hook first",
+    "tags": ["10-14 tags"]
   }}
 }}"""
 
@@ -361,7 +346,7 @@ def _validate(story: dict, expected_shots: int) -> None:
 
     for index, shot in enumerate(story["shots"], start=1):
         shot.setdefault("shot_id", f"shot_{index:03d}")
-        for field in ("narration_hi", "subtitle_en", "veo_prompt"):
+        for field in ("narration", "veo_prompt"):
             if not shot.get(field):
                 raise StoryGenerationError(f"{shot['shot_id']} is missing '{field}'")
         # An unknown id would break the artifact cross-reference later.
