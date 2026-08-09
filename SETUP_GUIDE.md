@@ -1,296 +1,281 @@
-# Kids Video Generator - Daily Automation Setup Guide
+# Hindi Science Explainer Pipeline — Setup Guide
 
-## 🎯 Overview
+## Overview
 
-This pipeline automatically creates and publishes a Hindi kids animated video **every day** to:
-- **YouTube Shorts** 
-- **Instagram Reels**
-- Sends Telegram notification
+Generates and publishes Hindi science/engineering explainer videos to YouTube.
+Narration is Hindi; English subtitles are burned into the picture.
 
-Two modes available:
-1. **HeyGen Mode** (default) - Fast avatar videos (~3-5 min per video)
-2. **3D Animation Mode** - High-quality Pixar-style 3D (requires manual approval steps)
+```
+Claude writes the script  ->  Telegram approval  ->  Veo 3.1 clips (kie.ai)
+  ->  ElevenLabs narration  ->  ffmpeg stitch + subtitle burn-in  ->  YouTube
+```
 
----
+Two schedules, both on GitHub Actions:
 
-## 📋 Prerequisites
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `daily-pipeline.yml` | `0 2 * * *` (07:30 IST) | A 60s Short daily, plus a ~5 min long video on Sunday |
+| `telegram-requests.yml` | `*/15 * * * *` | Builds any topic you sent the bot with `/make` |
 
-### Required Accounts & API Keys
-
-| Service | Purpose | Get Key From |
-|---------|---------|--------------|
-| **Anthropic Claude** | Script generation | https://console.anthropic.com/ |
-| **HeyGen** | Avatar video generation | https://app.heygen.com/settings/api |
-| **YouTube Data API v3** | Trending topics + upload | https://console.cloud.google.com/ |
-| **YouTube OAuth** | Upload videos | Google Cloud Console → OAuth 2.0 |
-| **Instagram Graph API** | Post Reels | https://developers.facebook.com/ |
-| **Telegram Bot** | Notifications | @BotFather on Telegram |
-| **kie.ai** (optional) | 3D animation | https://kie.ai/ |
+**Nothing is rendered without your approval.** The script (~$0.05) is written
+first and sent to Telegram with the topic and description. Only after you tap
+Approve does the pipeline spend on Veo clips. No answer within an hour = no.
 
 ---
 
-## 🚀 Quick Start (GitHub Actions - Recommended)
+## Prerequisites
 
-### 1. Fork/Clone This Repository
+| Service | Purpose | Get key from |
+|---|---|---|
+| **Anthropic Claude** | Script + visual direction | https://console.anthropic.com/ |
+| **kie.ai** | Veo 3.1 video clips | https://kie.ai/ |
+| **ElevenLabs** | Hindi narration (paid plan required for library voices) | https://elevenlabs.io/ |
+| **YouTube Data API v3** | Trending signals | Google Cloud Console |
+| **YouTube OAuth** | Uploading | Google Cloud Console → Credentials |
+| **Telegram Bot** | Approvals, `/make` requests, notifications | @BotFather |
+
+Also needed on the runner: **Python 3.11** and **ffmpeg built with libass**
+(subtitle burn-in). CI installs both; see Local Development for macOS.
+
+---
+
+## Quick Start (GitHub Actions)
+
+### 1. Clone
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/kids-video-generator.git
-cd kids-video-generator
+git clone https://github.com/soumya-05/ai-video-generator-n-publisher.git
+cd ai-video-generator-n-publisher
 ```
 
 ### 2. Add GitHub Secrets
-Go to **Settings → Secrets and variables → Actions → New repository secret**
 
-Add these **required** secrets:
-| Secret Name | Value |
-|-------------|-------|
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-xxxxx` |
-| `HEYGEN_API_KEY` | `sk_V2_hgu_xxxxx` |
+**Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret | Example |
+|---|---|
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-...` |
+| `KIE_API_TOKEN` | `...` |
+| `ELEVENLABS_API_KEY` | `sk_` + 48 hex chars |
 | `YOUTUBE_CLIENT_ID` | `xxx.apps.googleusercontent.com` |
-| `YOUTUBE_CLIENT_SECRET` | `GOCSPX-xxxxx` |
-| `YOUTUBE_REFRESH_TOKEN` | `1//0xxxx` |
-| `INSTAGRAM_ACCESS_TOKEN` | `EAAG...` (long-lived, 60 days) |
-| `INSTAGRAM_ACCOUNT_ID` | `178414xxxx` (Instagram Business Account ID) |
-| `TELEGRAM_BOT_TOKEN` | `123456:ABC-xxxxx` |
+| `YOUTUBE_CLIENT_SECRET` | `GOCSPX-...` |
+| `YOUTUBE_REFRESH_TOKEN` | `1//0...` |
+| `YOUTUBE_DATA_API_KEY` | `AIza...` |
+| `TELEGRAM_BOT_TOKEN` | `123456:ABC-...` |
 | `TELEGRAM_CHAT_ID` | `7148944586` |
-| `YOUTUBE_DATA_API_KEY` | `AIzaSyXxxxx` |
 
-Optional (for 3D mode):
-| Secret Name | Value |
-|-------------|-------|
-| `KIE_API_TOKEN` | `xxx` |
+Verify them all at once with the **Check Keys** workflow
+(`.github/workflows/check-keys.yml`) — it validates every credential and prints
+no values.
 
-Character reference sheets need no key: they are committed to `data/cast/` and
-served from raw.githubusercontent.com, which requires the repo to stay public.
+### 3. Enable the workflows
 
-### 3. Enable Workflow
-1. Go to **Actions** tab
-2. Enable "Daily Kids Video Pipeline" workflow
-3. It runs automatically at **2:00 AM UTC (7:30 AM IST)** daily
+Actions tab → enable **Daily Science Video Pipeline** and **Telegram Topic
+Requests**. They share a `video-pipeline` concurrency group so they never poll
+Telegram at the same time.
 
-### 4. Test Run
-- Go to Actions → "Daily Kids Video Pipeline" → **Run workflow**
-- Check logs for success/failure
+### 4. Test run
+
+Actions → **Daily Science Video Pipeline** → **Run workflow** with
+`dry_run: true`. That writes a full script and stops before anything is billed.
 
 ---
 
-## 💻 Local Development Setup
+## Local Development
 
-### 1. Install Dependencies
 ```bash
-cd kids-video-generator
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install pyyaml requests apscheduler
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python scripts/init_env.py        # prompts for each key, writes .env (0600)
+python run_daily_pipeline.py run --dry-run
 ```
 
-### 2. Configure
+macOS needs a full ffmpeg. Homebrew's `ffmpeg` formula is built *without*
+libass, so subtitle burn-in fails with `No such filter: 'subtitles'`:
+
 ```bash
-cp config.yaml.example config.yaml
-# Edit config.yaml with your API keys
+brew install ffmpeg-full
+export PATH="/opt/homebrew/opt/ffmpeg-full/bin:$PATH"
 ```
 
-### 3. Run Once (Test)
-```bash
-python run_daily_pipeline.py --test
-```
+Ubuntu's `apt-get install -y ffmpeg` (what CI uses) already includes libass.
+`assemble.ensure_ffmpeg()` checks for the filter before any paid step, so a
+bad binary costs nothing.
 
-### 4. Run Production
+### Commands
+
 ```bash
-python run_daily_pipeline.py        # Single run
-python run_daily_pipeline.py --daemon  # Run scheduler continuously
+python run_daily_pipeline.py run --dry-run          # plan a video, spend nothing
+python run_daily_pipeline.py run                    # today's scheduled videos
+python run_daily_pipeline.py run --only short --skip-upload
+python run_daily_pipeline.py run --date 2026-08-16  # pretend it is this day
+python run_daily_pipeline.py listen                 # build /make requests
+python run_daily_pipeline.py voices                 # list Hindi ElevenLabs voices
 ```
 
 ---
 
-## 🔐 Detailed API Setup Instructions
+## Requesting a topic from Telegram
 
-### Anthropic Claude
-1. Go to https://console.anthropic.com/
-2. Create API key
-3. Add to secrets as `ANTHROPIC_API_KEY`
+Message the bot:
 
-### HeyGen
-1. Go to https://app.heygen.com/settings/api
-2. Generate API key
-3. Add to secrets as `HEYGEN_API_KEY`
+```
+/make how a washing machine works
+/make long CRISPR gene editing | focus on the delivery problem
+/make short why planes stay up | keep it counter-intuitive
+```
 
-### YouTube (Two Parts)
+- `short` (default, 8 shots) or `long` (38 shots) as the first word.
+- Everything after `|` is extra direction for Claude.
 
-#### Part A: YouTube Data API v3 (for trending topics)
-1. Google Cloud Console → APIs & Services → Enable "YouTube Data API v3"
-2. Create API Key (restrict to YouTube Data API v3)
-3. Add as `YOUTUBE_DATA_API_KEY`
-
-#### Part B: YouTube OAuth (for uploading)
-1. Google Cloud Console → APIs & Services → Credentials
-2. Create OAuth 2.0 Client ID (Web application)
-3. Authorized redirect URIs: `https://developers.google.com/oauthplayground`
-4. Get Client ID & Secret → Add as `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET`
-5. Go to OAuth Playground: https://developers.google.com/oauthplayground
-6. Settings (gear) → Use your own OAuth credentials → Enter Client ID/Secret
-7. Select "YouTube Data API v3" → `https://www.googleapis.com/auth/youtube.upload`
-8. Authorize → Exchange code for tokens
-9. Copy **Refresh Token** → Add as `YOUTUBE_REFRESH_TOKEN`
-
-### Instagram Graph API
-1. Facebook Developers → Create App → Business
-2. Add "Instagram Graph API" product
-3. Get Long-lived Access Token (60 days):
-   - Graph API Explorer → Get User Access Token
-   - Permissions: `instagram_basic`, `instagram_content_publish`, `pages_show_list`
-   - Extend token: `https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id={APP_ID}&client_secret={APP_SECRET}&fb_exchange_token={SHORT_TOKEN}`
-4. Get Instagram Business Account ID:
-   - `https://graph.facebook.com/v18.0/me/accounts?fields=instagram_business_account&access_token={LONG_TOKEN}`
-5. Add `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_ACCOUNT_ID`
-
-### Telegram Bot
-1. Message @BotFather on Telegram
-2. `/newbot` → Follow instructions
-3. Copy token → Add as `TELEGRAM_BOT_TOKEN`
-4. Start chat with your bot
-5. Get chat ID: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-6. Add as `TELEGRAM_CHAT_ID`
+Within about 15 minutes the workflow writes the script, sends it back for
+approval, then renders and uploads it.
 
 ---
 
-## 🎬 Switching to 3D Animation Mode
+## API setup notes
 
-For higher quality (but manual approval required):
+### Anthropic
+Create a key at https://console.anthropic.com/. The model is set in
+`config.yaml` under `story.model`.
 
-### 1. Enable in config.yaml
+### YouTube — Data API key (trending signals)
+Google Cloud Console → APIs & Services → enable **YouTube Data API v3** →
+create an API key → `YOUTUBE_DATA_API_KEY`.
+
+### YouTube — OAuth (uploading)
+1. Credentials → Create OAuth 2.0 Client ID → **Desktop app**
+   (required for the loopback redirect used by `scripts/youtube_auth.py`).
+2. `python scripts/youtube_auth.py` and complete the browser flow.
+3. Copy the refresh token into `YOUTUBE_REFRESH_TOKEN`.
+
+> **Publish the OAuth app.** While the consent screen is in *Testing*, Google
+> expires refresh tokens after **7 days**, so daily uploads die every week with
+> `invalid_grant`. Do not upload a logo or set domains — either forces a
+> verification review.
+
+### ElevenLabs
+The key is `sk_` + 48 hex characters. The 64-character hex string shown on the
+dashboard is a key *ID*, not a credential. Library voices require a paid plan;
+the free tier only exposes the ~21 premade voices.
+
+### Telegram
+1. `/newbot` with @BotFather, copy the token.
+2. Send your bot a message, then read the chat id from
+   `https://api.telegram.org/bot<TOKEN>/getUpdates`.
+
+---
+
+## Configuration
+
+`config.yaml` holds non-secret settings only (copy from `config.yaml.example`).
+API keys always come from environment variables and override the file.
+
 ```yaml
 pipeline:
-  mode: "3d"  # or "both" to run both
+  short_days: [0, 1, 2, 3, 4, 5, 6]   # Mon=0 .. Sun=6
+  long_days: [6]
+  content_rotation:                    # subject area per weekday
+    - how_everyday_machines_work
+    - physics_and_energy
+    - space_and_astronomy
+    - technology_and_computing
+    - biology_and_the_human_body
+    - medical_science
+    - engineering_and_infrastructure
+
+short: {shot_count: 8,  aspect_ratio: "9:16", veo_model: veo3_fast}
+long:  {shot_count: 38, aspect_ratio: "16:9", veo_model: veo3_fast}
+
+approval:  {enabled: true, timeout_seconds: 3600}
+subtitles: {enabled: true}
+youtube:   {category_id: "28", made_for_kids: false, privacy_status: public}
 ```
 
-### 2. Add the kie.ai key to secrets
+Topics are never hardcoded — Claude picks a specific mechanism inside the day's
+subject area, avoiding anything in `data/history.json`.
 
-### 3. Run 3D Pipeline Manually (5-step process)
-```bash
-# Step 1: Generate story from logline
-# (Use the skill: generating-story-from-logline)
-
-# Step 2: Extract characters & backgrounds
-# (Use skill: extracting-characters-and-backgrounds)
-
-# Step 3: Generate images
-python ~/.claude/skills/generating-character-and-background-images/scripts/generate_images.py
-
-# Step 4: Create shot list
-# (Use skill: creating-shot-list)
-
-# Step 5: Generate composites + video + merge
-python ~/.claude/skills/generating-composite-and-video/scripts/generate_videos.py
-python ~/.claude/skills/generating-composite-and-video/scripts/merge_clips.py
-```
-
-> **Note:** 3D mode requires manual approval at each step. Not fully automated.
+The daily cron lives in `.github/workflows/daily-pipeline.yml`, not in
+`config.yaml`.
 
 ---
 
-## 📊 Monitoring & Logs
+## Cost
 
-### GitHub Actions
-- View runs at: `https://github.com/USER/REPO/actions`
-- Logs retained for 90 days (on paid plans) / 30 days (free)
+1 kie credit = $0.005. At `veo3_fast` ($0.325 per 8s clip):
 
-### Local Logs
-- File: `logs/pipeline.log`
-- Rotating logs (10MB max, 5 backups)
+| Format | Shots | Per video |
+|---|---|---|
+| Short | 8 | ~$2.69 |
+| Long | 38 | ~$12.77 |
 
-### Telegram Notifications
-- Success: Video links + topic + moral
-- Failure: Error details for debugging
+Daily Shorts + a weekly long video ≈ **$135/month**. Veo is >95% of the bill;
+Claude and ElevenLabs are rounding errors. `veo3` (non-fast) is 4× the price.
 
 ---
 
-## 🔧 Customization
+## Monitoring
 
-### Change Schedule
-Edit `config.yaml`:
-```yaml
-pipeline:
-  schedule_cron: "0 2 * * *"  # 2 AM UTC = 7:30 AM IST
-  # For 8 AM IST: "30 2 * * *"
-  # For 6 PM IST: "30 12 * * *"
-```
-
-### Add Custom Topics
-Edit `config.yaml` → `pipeline.topics`:
-```yaml
-topics:
-  story:
-    - "your custom story"
-    - "another story"
-```
-
-### Change Video Style
-Edit `heygen` section in config.yaml:
-```yaml
-heygen:
-  avatar_id: "specific_avatar_id"  # or "auto"
-  voice_id: "hi-IN-Standard-A"  # See HeyGen voices
-```
+- **Telegram** — approval requests, success with the video link, failures with
+  the error.
+- **GitHub Actions** — every run uploads `logs/` and the generated JSON as an
+  artifact (7 day retention).
+- **Local** — `logs/pipeline.log`.
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### "Invalid YouTube refresh token"
-- Re-generate refresh token via OAuth Playground
-- Ensure `youtube.upload` scope is authorized
+**`No such filter: 'subtitles'`** — ffmpeg was built without libass. See the
+macOS note above, or set `subtitles.enabled: false`.
 
-### "Instagram token expired"
-- Tokens last 60 days
-- Re-generate long-lived token and update secret
+**`invalid_grant` on upload** — the OAuth consent screen is still in Testing.
+Publish the app and regenerate the refresh token.
 
-### "HeyGen video generation failed"
-- Check API key validity
-- Verify account has credits
-- Check prompt length (max ~2000 chars)
+**Custom thumbnail 403** — the channel is not phone-verified. Fix at
+youtube.com/verify. This only logs a warning; it never fails a run.
 
-### "Telegram notification not received"
-- Verify bot token and chat ID
-- Ensure you've started chat with bot (`/start`)
+**Approval never arrives** — check `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`.
+If Telegram is unconfigured the pipeline refuses to spend and skips the video.
 
-### GitHub Actions timeout
-- Default: 30 min
-- Increase in workflow: `timeout-minutes: 60`
+**A shot fails to render** — Veo's safety filter blocks prompts at random.
+Blocked requests are not billed and are retried (`kie.clip_attempts`). Shorts
+abort if any shot fails; long videos tolerate 10%.
 
 ---
 
-## 📁 File Structure
+## File structure
+
 ```
-kids-video-generator/
-├── config.yaml                 # Main configuration (copy from example)
-├── config.yaml.example         # Template
-├── run_daily_pipeline.py       # Main orchestrator script
-├── .github/
-│   └── workflows/
-│       └── daily-pipeline.yml  # GitHub Actions workflow
-├── logs/                       # Auto-created
-└── story-to-animation-skills/  # 3D animation pipeline (5 skills)
-    ├── generating-story-from-logline/
-    ├── extracting-characters-and-backgrounds/
-    ├── generating-character-and-background-images/
-    ├── creating-shot-list/
-    └── generating-composite-and-video/
+├── run_daily_pipeline.py       # CLI: run | listen | voices
+├── config.yaml(.example)       # non-secret settings
+├── kids_video/
+│   ├── pipeline.py             # orchestration
+│   ├── story.py                # Claude script + Veo prompts
+│   ├── trends.py               # YouTube trending signals
+│   ├── kie.py                  # Veo 3.1 clip rendering
+│   ├── voice.py                # ElevenLabs narration
+│   ├── assemble.py             # ffmpeg stitch, subtitle burn-in, thumbnail
+│   ├── youtube.py              # upload + metadata
+│   ├── notify.py               # Telegram approvals and /make requests
+│   ├── history.py              # published-topic memory
+│   └── config.py               # config + secrets loading
+├── scripts/
+│   ├── init_env.py             # write a .env template
+│   ├── youtube_auth.py         # obtain a refresh token
+│   └── check_keys.py           # validate every credential
+├── .github/workflows/
+│   ├── daily-pipeline.yml
+│   ├── telegram-requests.yml
+│   ├── check-keys.yml
+│   └── secret-scan.yml
+└── data/history.json           # what has already been published
 ```
 
 ---
 
-## 🆘 Support
+## License
 
-- Check logs first: `logs/pipeline.log` or GitHub Actions logs
-- Telegram notifications include error details
-- For 3D pipeline issues, refer to individual skill `.md` files in `story-to-animation-skills/`
-
----
-
-## 📝 License
-
-MIT License - Feel free to modify and use for your channel!
-
----
-
-**Happy automating! 🎬✨**
+MIT.
