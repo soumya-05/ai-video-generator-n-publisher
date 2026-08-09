@@ -2,6 +2,10 @@ name = "telegram-make-trigger"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 
+# Cron-only: there is no fetch handler, so it needs no public URL. Without this
+# wrangler insists on registering a workers.dev subdomain to deploy.
+workers_dev = false
+
 # Cloudflare's free plan includes cron triggers and 100k requests/day. This is
 # 1,440 peeks/day, so it stays free.
 [triggers]
@@ -13,7 +17,7 @@ GITHUB_REPO = "soumya-05/ai-video-generator-n-publisher"
 # `wrangler kv namespace create STATE` prints the id to paste here.
 [[kv_namespaces]]
 binding = "STATE"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "7f44485391a3436796d9e9baf4ffd5b9"
 
 # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID and GITHUB_TOKEN are set with
 # `wrangler secret put`, never in this file - it is committed to a public repo.
