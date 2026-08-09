@@ -55,6 +55,12 @@ Safety:
 - Gentle throughout. No violence, death, real fear, injury, or scary imagery.
   Tension comes from worry and hope, never from threat. Problems are solved by
   cleverness, courage or kindness.
+- The video model refuses any shot that reads as a child in physical danger,
+  even a happy one, and a refused shot wastes the whole episode. So never put a
+  child character near a well, a rooftop edge, deep or moving water, fire, a
+  stove, heights, machinery, tools with blades, or a rope tied to anyone. Keep
+  children on the ground doing safe things; give risky-looking actions to an
+  animal friend or a magical object instead.
 
 Hindi narration:
 - Simple spoken Hindi (Devanagari) a 5-year-old understands. Short sentences.
@@ -98,11 +104,25 @@ class StoryGenerator:
         prompt = self._build_prompt(
             content_type, video_format, shot_count, signals, avoid, host, friends
         )
-        raw = self._call_claude(prompt)
-        story = _parse_json(raw)
-        story["content_type"] = content_type
-        story["format"] = video_format
-        _validate(story, shot_count, host.key)
+        # A 38-shot story is a large JSON object and Claude occasionally drops a
+        # field from one shot. Another call costs cents, while letting it through
+        # wastes an entire render, so just ask again.
+        attempts = self.config.get("story.max_attempts", 3)
+        for attempt in range(1, attempts + 1):
+            try:
+                raw = self._call_claude(prompt)
+                story = _parse_json(raw)
+                story["content_type"] = content_type
+                story["format"] = video_format
+                _validate(story, shot_count, host.key)
+                break
+            except StoryGenerationError as exc:
+                if attempt == attempts:
+                    raise
+                self.logger.warning(
+                    "Story attempt %d/%d rejected (%s); regenerating",
+                    attempt, attempts, exc,
+                )
         self.logger.info(
             "Story: %s (%d shots, %d characters)",
             story.get("title", "?"),

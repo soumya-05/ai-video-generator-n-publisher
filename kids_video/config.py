@@ -69,6 +69,9 @@ DEFAULTS: Dict[str, Any] = {
         "max_poll_seconds": 900,
         # kie.ai hard-rejects over 20 requests / 10s
         "submit_delay_seconds": 0.6,
+        # Veo's safety filter blocks the same wholesome prompt at random. A
+        # blocked request renders nothing and is not billed, so retry it.
+        "clip_attempts": 3,
     },
     # Character reference sheets are served straight from this repository, so
     # it must stay public. kie.ai deletes generated media after 14 days.
@@ -181,6 +184,9 @@ DEFAULTS: Dict[str, Any] = {
         "model": "claude-opus-4-6",
         # Recurring friends featured per episode, on top of the host.
         "friends_per_episode": 2,
+        # Regenerate when a shot comes back missing a field, which happens
+        # occasionally on the 38-shot long format.
+        "max_attempts": 3,
     },
     "paths": {
         "work_dir": "build",

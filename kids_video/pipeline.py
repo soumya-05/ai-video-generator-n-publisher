@@ -260,30 +260,46 @@ class Pipeline:
         failed: List[str] = []
         lock = threading.Lock()
 
+        # Veo's safety filter is stochastic: the same wholesome prompt can be
+        # blocked once and pass on the next submission. A blocked request
+        # generates nothing and so costs nothing, whereas giving up strands
+        # every clip already paid for in this episode.
+        attempts = self.config.get("kie.clip_attempts", 3)
+
         def task(shot: dict):
             def run():
                 shot_id = shot["shot_id"]
                 # Passing the locked reference sheets is what keeps recurring
                 # characters identical across every clip and every episode.
                 references = cast.reference_urls_for(shot.get("cast_keys", []))
-                try:
-                    url = self.kie.generate_clip(
-                        prompt=shot["veo_prompt"],
-                        aspect_ratio=aspect_ratio,
-                        model=veo_model,
-                        resolution=self.config.get(
-                            f"{story['format']}.resolution", "1080p"
-                        ),
-                        reference_urls=references,
-                        label=shot_id,
-                    )
-                    path = download(url, work_dir / "clips" / f"{shot_id}.mp4")
-                    with lock:
-                        clips[shot_id] = path
-                except Exception as exc:  # noqa: BLE001 - recorded, handled by caller
-                    self.logger.error("%s failed: %s", shot_id, exc)
-                    with lock:
-                        failed.append(shot_id)
+                for attempt in range(1, attempts + 1):
+                    try:
+                        url = self.kie.generate_clip(
+                            prompt=shot["veo_prompt"],
+                            aspect_ratio=aspect_ratio,
+                            model=veo_model,
+                            resolution=self.config.get(
+                                f"{story['format']}.resolution", "1080p"
+                            ),
+                            reference_urls=references,
+                            label=shot_id,
+                        )
+                        path = download(url, work_dir / "clips" / f"{shot_id}.mp4")
+                        with lock:
+                            clips[shot_id] = path
+                        return
+                    except Exception as exc:  # noqa: BLE001 - handled by caller
+                        if attempt == attempts:
+                            self.logger.error(
+                                "%s failed after %d attempts: %s", shot_id, attempts, exc
+                            )
+                            with lock:
+                                failed.append(shot_id)
+                        else:
+                            self.logger.warning(
+                                "%s attempt %d/%d failed (%s); retrying",
+                                shot_id, attempt, attempts, exc,
+                            )
             return run
 
         self.kie.run_parallel([task(shot) for shot in story["shots"]])
