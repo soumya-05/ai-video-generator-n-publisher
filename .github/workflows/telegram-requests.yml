@@ -6,9 +6,12 @@ name: Telegram Topic Requests
 # The script is written first, sent back for approval, and only then rendered.
 
 on:
+  # Normal path: trigger/worker/ notices a /make within a minute and fires this.
+  repository_dispatch:
+    types: [telegram-request]
   schedule:
-    # Every 15 minutes. GitHub delays scheduled runs under load, so treat this
-    # as "within about half an hour", not a guarantee.
+    # Fallback for when the worker is down. GitHub delays scheduled runs under
+    # load, so treat this as "within about half an hour", not a guarantee.
     - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
