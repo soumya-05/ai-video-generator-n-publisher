@@ -264,9 +264,11 @@ already used. Do not show me this thinking - only the final JSON.
 
 REQUIREMENTS
 1. Invent 4-8 distinct visual settings ("backgrounds"): the inside of the
-   machine, a laboratory, a factory floor, a cutaway cross-section, a microscopic
-   view, deep space, a schematic void. Never use the same background for more
-   than three shots in a row - the picture must keep changing.
+   machine, a workshop bench, a factory floor, a cutaway cross-section, a
+   microscopic view, deep space. Every one must be a real physical place with
+   real materials - never an abstract void, floating diagram or schematic
+   space, which always reads as cheap CGI. Never use the same background for
+   more than three shots in a row - the picture must keep changing.
 2. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
 3. narration_hi for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
    Hindi words. COUNT THE WORDS of every line before you finish and shorten any
@@ -278,17 +280,35 @@ REQUIREMENTS
 5. Every shot must advance the explanation. If a shot could be deleted without
    the viewer losing a step, replace it. Give each shot its own beat in "mood".
 6. veo_prompt for each shot must be in ENGLISH and fully self-contained: never
-   reference bg_id or an earlier shot. Always start with
-   "Cinematic photorealistic 3D visualisation," and end with ", 8 seconds".
-   Each one must state: camera (macro push-in, slow orbit, cutaway reveal,
-   exploded view rotating, wide establishing, extreme close-up), what is
-   physically happening and moving, the setting, and the lighting. Vary the
-   camera between shots - never three identical framings in a row.
-   NO human characters, no faces, no hands, no presenter, no cartoon styling.
-   The subject is the machine, the molecule, the organ or the cosmos itself.
+   reference bg_id or an earlier shot. End every prompt with ", 8 seconds".
+   Write it as a DESCRIPTION OF REAL FOOTAGE, never as a description of a
+   render. Begin each prompt with one of:
+     "Photorealistic live-action macro cinematography," - for anything that
+       physically exists at human scale: machines, parts, tools, materials.
+     "High-end scientific documentary footage," - for what a real camera cannot
+       reach: microscopic, molecular, internal anatomy, deep space.
+   Then state, in this order:
+     a) camera and lens, in real equipment terms - "85mm macro lens, slow
+        push-in, shallow depth of field", "35mm wide, slow dolly left",
+        "probe lens creeping between components", "locked-off tripod, slow
+        orbit". Vary it between shots; never three identical framings in a row.
+     b) exactly what is moving, and how fast. Something must move in every
+        shot - rotation, flow, vibration, heat shimmer, a part sliding home.
+     c) the setting, with materials described the way real objects look:
+        brushed aluminium with fine scratches, a smear of grease, dust in the
+        air, condensation, worn paint, fingerprints. Perfect clean surfaces are
+        what makes a shot look fake.
+     d) lighting as a real setup - "single hard key from a window, deep
+        shadows", "soft overcast light", "practical LED glow from inside the
+        housing". Never "even studio lighting" on everything.
+     e) finish with realism anchors: "natural motion blur, subtle handheld
+        micro-movement, fine film grain, shot on ARRI Alexa, photorealistic,
+        not a 3D render, not an illustration, not CGI-looking".
+   NO human characters, no faces, no hands, no presenter, no cartoon styling,
+   no glossy corporate-explainer look. The subject is the machine, the
+   molecule, the organ or the cosmos itself.
    Never ask for on-screen text, numbers, labels, arrows, letters, subtitles,
-   logos, watermarks or UI - the video model renders text as garbage and the
-   English subtitles are burned in separately.
+   logos, watermarks or UI - the video model renders text as garbage.
 7. YouTube metadata in Hindi. The title must promise the answer to a question -
    curiosity beats description. The description opens with a one-line hook.
 
@@ -308,7 +328,7 @@ Return ONLY this JSON object:
       "mood": "beat of this shot",
       "narration_hi": "Hindi narration for this 8 second shot",
       "subtitle_en": "English subtitle line, same meaning, short",
-      "veo_prompt": "Cinematic photorealistic 3D visualisation, <camera>, <what is happening and moving>, <setting>, <lighting>, 8 seconds"}}
+      "veo_prompt": "Photorealistic live-action macro cinematography, <lens and camera move>, <what is moving>, <setting with worn real materials>, <real lighting setup>, natural motion blur, subtle handheld micro-movement, fine film grain, shot on ARRI Alexa, photorealistic, not a 3D render, not an illustration, 8 seconds"}}
   ],
   "youtube": {{
     "title": "Hindi YouTube title under 90 characters",

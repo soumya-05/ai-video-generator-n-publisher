@@ -48,9 +48,11 @@ approval:
   enabled: true
   timeout_seconds: 3600   # no answer within an hour = skip, spend nothing
 
-# English subtitles burned into the frame. Sizes are pixels at 1080p.
+# English subtitles burned into the frame. Turned off because the caption box
+# covered too much of the picture; the styling below still applies if it is
+# switched back on.
 subtitles:
-  enabled: true
+  enabled: false
   font: "DejaVu Sans"
 
 voice:
