@@ -71,9 +71,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase
+          # Commit before pulling: the run has already written history.json, and
+          # rebase refuses to start with unstaged changes in the tree.
           git add data/history.json
           git diff --staged --quiet || git commit -m "chore: record requested video [skip ci]"
+          git pull --rebase
           git push
 
       - name: Upload logs and script artifacts
