@@ -80,7 +80,19 @@ DEFAULTS: Dict[str, Any] = {
     "voice": {
         "provider": "elevenlabs",
         "model_id": "eleven_multilingual_v2",
-        "voice_id": "3AMU7jXQuQa3oRvRqUmb",  # Viraj - Hindi storyteller
+        "voice_id": "3AMU7jXQuQa3oRvRqUmb",  # Viraj; used when rotation is empty
+        # A different Hindi storyteller each weekday, indexed by Python
+        # weekday(). All are kids/animation voices from the ElevenLabs library,
+        # which need a paid plan. Empty this list to pin voice_id instead.
+        "rotation": [
+            "CNKl99QEbWm8RQ4D8GfC",  # Mon - Chutki, cute young kids storyteller
+            "subIZc6skATBQ1Rbqpi7",  # Tue - Mahira J, expressive kids narrator
+            "4RloeZf2FRvGiu4uoKOf",  # Wed - Riya, children storytelling
+            "MIl0Flub6Sc9KSkX2A42",  # Thu - Mithi, moral kids stories
+            "A2VREc2wjqtSZloENLHe",  # Fri - Suhana J, very young and expressive
+            "psk8YLODv4ETdKheNwwz",  # Sat - Gappu, kids cartoon character
+            "Rg5w9usCZCJdEdW501zk",  # Sun - Vidya, warm motherly (long story day)
+        ],
         "output_format": "mp3_44100_128",
         "stability": 0.45,
         "similarity_boost": 0.75,

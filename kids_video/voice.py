@@ -5,6 +5,7 @@ to disable it), so the assembler strips that track and replaces it with this
 narration.
 """
 
+from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
@@ -30,15 +31,32 @@ class HindiNarrator:
         key = self.config.require_key("elevenlabs", "ELEVENLABS_API_KEY")
         return {"xi-api-key": key, "Content-Type": "application/json"}
 
-    def narrate(self, text: str, destination: Path, label: str = "narration") -> Path:
+    def voice_for(self, day: date) -> str:
+        """The narrator for a given day.
+
+        A daily channel narrated by one voice starts to sound like the same
+        episode repeated, so voice.rotation cycles a different storyteller per
+        weekday. Leave the list empty to pin a single narrator instead.
+        """
+        rotation = self.config.get("voice.rotation") or []
+        if not rotation:
+            return self.voice_id
+        return rotation[day.weekday() % len(rotation)]
+
+    def narrate(
+        self,
+        text: str,
+        destination: Path,
+        label: str = "narration",
+        voice_id: Optional[str] = None,
+    ) -> Path:
         """Render one line of Hindi narration to an mp3 file."""
         body = {
             "text": text,
             "model_id": self.model_id,
             "language_code": "hi",
-            # Off by default, but it materially improves how numbers and
-            # abbreviations are spoken in non-English languages.
-            "apply_language_text_normalization": True,
+            # apply_language_text_normalization is deliberately not sent:
+            # ElevenLabs rejects it with a 400 for 'hi'.
             "voice_settings": {
                 "stability": self.config.get("voice.stability", 0.45),
                 "similarity_boost": self.config.get("voice.similarity_boost", 0.75),
@@ -48,7 +66,7 @@ class HindiNarrator:
             },
         }
         resp = requests.post(
-            f"{BASE_URL}/text-to-speech/{self.voice_id}",
+            f"{BASE_URL}/text-to-speech/{voice_id or self.voice_id}",
             headers=self._headers,
             params={"output_format": self.output_format},
             json=body,

@@ -165,7 +165,7 @@ class Pipeline:
 
         # 2. Narration and clips
         assemble.ensure_ffmpeg()
-        narrations = self._render_narration(story, work_dir)
+        narrations = self._render_narration(story, work_dir, today)
         clips, failed = self._render_clips(
             story, work_dir, cast, aspect_ratio, veo_model
         )
@@ -221,8 +221,14 @@ class Pipeline:
         dump("shots.json", {"shots": story["shots"]})
         self.logger.info("Artifacts written to %s", work_dir)
 
-    def _render_narration(self, story: dict, work_dir: Path) -> Dict[str, Path]:
-        self.logger.info("Rendering Hindi narration for %d shots", len(story["shots"]))
+    def _render_narration(
+        self, story: dict, work_dir: Path, today: date
+    ) -> Dict[str, Path]:
+        voice_id = self.narrator.voice_for(today)
+        self.logger.info(
+            "Rendering Hindi narration for %d shots (voice %s)",
+            len(story["shots"]), voice_id,
+        )
         narrations: Dict[str, Path] = {}
         lock = threading.Lock()
 
@@ -232,6 +238,7 @@ class Pipeline:
                     shot["narration_hi"],
                     work_dir / "narration" / f"{shot['shot_id']}.mp3",
                     label=shot["shot_id"],
+                    voice_id=voice_id,
                 )
                 with lock:
                     narrations[shot["shot_id"]] = path
