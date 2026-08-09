@@ -268,13 +268,12 @@ kids-video-generator/
 │   └── workflows/
 │       └── daily-pipeline.yml  # GitHub Actions workflow
 ├── logs/                       # Auto-created
-├── story-to-animation-skills/  # 3D animation pipeline (5 skills)
-│   ├── generating-story-from-logline/
-│   ├── extracting-characters-and-backgrounds/
-│   ├── generating-character-and-background-images/
-│   ├── creating-shot-list/
-│   └── generating-composite-and-video/
-└── kids_video_n8n_workflow.json # Original n8n workflow reference
+└── story-to-animation-skills/  # 3D animation pipeline (5 skills)
+    ├── generating-story-from-logline/
+    ├── extracting-characters-and-backgrounds/
+    ├── generating-character-and-background-images/
+    ├── creating-shot-list/
+    └── generating-composite-and-video/
 ```
 
 ---
