@@ -2,7 +2,7 @@
 #
 # API keys are NOT stored here. They come from environment variables, which
 # always win over anything in this file:
-#   ANTHROPIC_API_KEY   KIE_API_TOKEN        IMGBB_API_KEY
+#   ANTHROPIC_API_KEY   KIE_API_TOKEN
 #   ELEVENLABS_API_KEY  YOUTUBE_CLIENT_ID    YOUTUBE_CLIENT_SECRET
 #   YOUTUBE_REFRESH_TOKEN  YOUTUBE_DATA_API_KEY
 #   TELEGRAM_BOT_TOKEN  TELEGRAM_CHAT_ID
@@ -45,6 +45,13 @@ long:
 story:
   model: claude-opus-4-6
   friends_per_episode: 2   # recurring friends featured alongside the host
+
+# Character reference sheets are committed here and served from
+# raw.githubusercontent.com, so this repository must stay public.
+cast_images:
+  repo: soumya-05/kids-video-generator
+  branch: main
+  dir: data/cast
 
 voice:
   voice_id: "3AMU7jXQuQa3oRvRqUmb"   # Viraj, Hindi storyteller

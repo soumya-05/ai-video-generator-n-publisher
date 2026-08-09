@@ -36,5 +36,6 @@ archive.zip
 domain_checker.py
 unigram_freq.csv
 
-# NOTE: data/cast.json and data/history.json MUST be committed - they pin the
-# permanent characters and the published-story history.
+# NOTE: data/cast.json, data/history.json and data/cast/*.png MUST be committed.
+# They pin the permanent characters and the published-story history, and Veo
+# fetches the PNGs from raw.githubusercontent.com at render time.

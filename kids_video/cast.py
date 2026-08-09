@@ -2,9 +2,14 @@
 
 Kids come back for characters they recognise, so appearance must be locked
 forever. Each cast member gets a multi-view reference sheet rendered exactly
-once, hosted permanently on imgbb, and pinned in data/cast.json (committed).
-Those URLs are then passed to Veo as REFERENCE_2_VIDEO inputs so the character
-looks identical in every clip of every episode.
+once, committed to this repository, and pinned in data/cast.json. Those raw
+URLs are then passed to Veo as REFERENCE_2_VIDEO inputs so the character looks
+identical in every clip of every episode.
+
+kie.ai deletes generated media after 14 days, so the sheets have to live
+somewhere permanent. They are served from raw.githubusercontent.com, which
+needs no account and no API key but does require this repository to stay
+public and the PNGs to be pushed before the first render.
 
 Adding cast members is close to free: a Veo clip costs the same $0.325 whether
 one character or four are on screen. The only cost is the one-off reference
@@ -20,7 +25,7 @@ from typing import Dict, List, Optional, Sequence
 
 import requests
 
-IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload"
+RAW_BASE = "https://raw.githubusercontent.com"
 MAX_REFERENCES = 3  # hard Veo limit
 
 VIEWS = {
@@ -148,9 +153,9 @@ class CastManager:
             raise CastError(
                 "No cast has been created yet. Run this once:\n"
                 "    python run_daily_pipeline.py setup-cast\n"
-                "It renders each character's reference sheet, hosts them on imgbb, "
-                f"and writes {self.path}. Commit that file so every future episode "
-                "reuses the exact same characters."
+                "It renders each character's reference sheet into the repository "
+                f"and writes {self.path}. Commit and push both so every future "
+                "episode reuses the exact same characters."
             )
         return cast
 
@@ -188,6 +193,12 @@ class CastManager:
             json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         self.logger.info("Cast saved to %s", self.path)
+        self.logger.info(
+            "Commit and push %s and %s/ now - Veo fetches the sheets over HTTP, "
+            "so a render will fail until they are live on the default branch.",
+            self.path,
+            self.config.get("cast_images.dir", "data/cast"),
+        )
         return Cast({key: Character(key, value) for key, value in current.items()})
 
     def _render_sheet(self, key: str, spec: dict) -> Dict[str, str]:
@@ -217,21 +228,28 @@ class CastManager:
         return urls
 
     def _host_permanently(self, source_url: str, name: str) -> str:
-        api_key = self.config.key("imgbb")
-        if not api_key:
+        """Download a kie.ai image into the repo and return its raw URL.
+
+        The URL only resolves once the PNG is committed and pushed, which
+        create() reminds you to do.
+        """
+        repo = self.config.get("cast_images.repo", "")
+        if not repo:
             raise CastError(
-                "IMGBB_API_KEY is required to host character sheets permanently. "
-                "kie.ai deletes generated images after 14 days, which would break "
-                "character consistency. Free key: https://api.imgbb.com/"
+                "Set cast_images.repo in config.yaml to 'owner/name' of this "
+                "repository. Reference sheets are served from raw.githubusercontent.com, "
+                "so the repository must also be public."
             )
-        resp = requests.post(
-            IMGBB_UPLOAD_URL,
-            data={"key": api_key, "image": source_url, "name": name},
-            timeout=120,
-        )
+        branch = self.config.get("cast_images.branch", "main")
+        directory = Path(self.config.get("cast_images.dir", "data/cast"))
+        directory.mkdir(parents=True, exist_ok=True)
+
+        resp = requests.get(source_url, timeout=120)
         if resp.status_code >= 400:
-            raise CastError(f"imgbb upload failed ({resp.status_code}): {resp.text[:200]}")
-        body = resp.json()
-        if not body.get("success"):
-            raise CastError(f"imgbb upload rejected: {body}")
-        return body["data"]["url"]
+            raise CastError(
+                f"could not download the rendered sheet for {name} "
+                f"({resp.status_code}): {resp.text[:200]}"
+            )
+        path = directory / f"{name}.png"
+        path.write_bytes(resp.content)
+        return f"{RAW_BASE}/{repo}/{branch}/{path.as_posix()}"

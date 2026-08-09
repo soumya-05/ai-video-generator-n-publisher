@@ -19,7 +19,6 @@ ENV_PATH = Path(".env")
 KEYS = [
     ("ANTHROPIC_API_KEY", "Claude, writes the stories", True),
     ("KIE_API_TOKEN", "kie.ai, renders the video clips", True),
-    ("IMGBB_API_KEY", "imgbb, permanently hosts character sheets", True),
     ("ELEVENLABS_API_KEY", "ElevenLabs, Hindi narration (starts with sk_)", True),
     ("YOUTUBE_CLIENT_ID", "OAuth client id (not secret, ends .apps.googleusercontent.com)", False),
     ("YOUTUBE_CLIENT_SECRET", "OAuth client secret", True),
