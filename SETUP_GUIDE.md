@@ -26,7 +26,6 @@ Two modes available:
 | **Instagram Graph API** | Post Reels | https://developers.facebook.com/ |
 | **Telegram Bot** | Notifications | @BotFather on Telegram |
 | **kie.ai** (optional) | 3D animation | https://kie.ai/ |
-| **imgbb** (optional) | Image hosting for 3D | https://api.imgbb.com/ |
 
 ---
 
@@ -59,7 +58,9 @@ Optional (for 3D mode):
 | Secret Name | Value |
 |-------------|-------|
 | `KIE_API_TOKEN` | `xxx` |
-| `IMGBB_API_KEY` | `xxx` |
+
+Character reference sheets need no key: they are committed to `data/cast/` and
+served from raw.githubusercontent.com, which requires the repo to stay public.
 
 ### 3. Enable Workflow
 1. Go to **Actions** tab
@@ -162,7 +163,7 @@ pipeline:
   mode: "3d"  # or "both" to run both
 ```
 
-### 2. Add kie.ai & imgbb keys to secrets
+### 2. Add the kie.ai key to secrets
 
 ### 3. Run 3D Pipeline Manually (5-step process)
 ```bash
