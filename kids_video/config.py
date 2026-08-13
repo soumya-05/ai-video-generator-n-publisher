@@ -28,10 +28,12 @@ ENV_KEYS = {
 
 DEFAULTS: Dict[str, Any] = {
     "pipeline": {
-        # Which format runs on which weekday. Long stories are expensive, so
-        # they run weekly; Shorts run every day.
-        "short_days": [0, 1, 2, 3, 4, 5, 6],
+        # One thoroughly made 10-minute explainer every fortnight, instead of a
+        # daily Short. Shorts are still published, but cut from clips the long
+        # video already paid for (see pipeline._cut_shorts).
+        "short_days": [],
         "long_days": [6],  # Sunday (Python weekday(): Mon=0 .. Sun=6)
+        "long_every_weeks": 2,  # 1 = weekly; 2 = alternate ISO weeks
         "language": "en",
         "target_audience": "curious adults",
         # Subject area rotation, indexed by Python weekday(). These are areas,
@@ -54,9 +56,9 @@ DEFAULTS: Dict[str, Any] = {
         "resolution": "1080p",
     },
     "long": {
-        "shot_count": 38,
+        "shot_count": 75,  # 75 x 8s = ~10 minutes
         "aspect_ratio": "16:9",
-        "veo_model": "veo3_fast",
+        "veo_model": "veo3",  # Quality: $1.275/clip, ~$96 per video
         "resolution": "1080p",
     },
     "kie": {

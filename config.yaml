@@ -13,11 +13,13 @@
 
 pipeline:
   # Python weekday(): Mon=0 .. Sun=6
-  # Current plan: Short daily + one 5-minute explainer on Sunday, ~$135/month.
-  #   daily 5-min video -> move `long` to long_days: [0,1,2,3,4,5,6]  (~$386/mo)
-  #   10-minute video   -> long.shot_count: 75                       (~$25/video)
-  short_days: [0, 1, 2, 3, 4, 5, 6]   # a 60s Short every day
-  long_days: [6]                      # the 5-minute explainer on Sunday
+  # Current plan: one 10-minute explainer every second Sunday, ~$209/month.
+  # Quality over cadence - the budget goes into one video instead of 30 Shorts.
+  #   weekly instead of fortnightly -> long_every_weeks: 1   (~$418/mo)
+  #   cheaper model                 -> long.veo_model: veo3_fast (~$25/video)
+  short_days: []          # no standalone Shorts; they are cut from the long video
+  long_days: [6]          # Sunday
+  long_every_weeks: 2     # every second ISO week
   language: en                        # narration language, worldwide audience
   # There is deliberately no topic list. Each run picks a fresh subject inside
   # the day's area, avoiding everything in data/history.json.
@@ -36,9 +38,10 @@ short:
   veo_model: veo3_fast   # veo3_lite $0.175 | veo3_fast $0.325 | veo3 $1.275 per clip
 
 long:
-  shot_count: 38         # 38 x 8s = ~5 minutes
+  shot_count: 75         # 75 x 8s = ~10 minutes
   aspect_ratio: "16:9"
-  veo_model: veo3_fast
+  veo_model: veo3        # Quality, ~$96 per video
+  resolution: 1080p
 
 story:
   model: claude-opus-5

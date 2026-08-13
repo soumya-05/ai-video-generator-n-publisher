@@ -283,6 +283,28 @@ def mix_background_music(
     return destination
 
 
+def last_frame(video: Path, destination: Path) -> Path:
+    """Grab the final frame, to open the next shot on.
+
+    -sseof seeks to one second before the end and -update overwrites the same
+    file for every frame after it, so what survives is the last frame. Asking
+    for an exact end timestamp instead tends to land past the final decodable
+    frame and produce nothing.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            "ffmpeg", "-y",
+            "-sseof", "-1",
+            "-i", str(video),
+            "-update", "1",
+            "-q:v", "2",
+            str(destination),
+        ]
+    )
+    return destination
+
+
 def thumbnail(video: Path, destination: Path, at_seconds: float = 1.5) -> Optional[Path]:
     try:
         _run(

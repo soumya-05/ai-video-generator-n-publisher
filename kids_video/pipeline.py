@@ -30,9 +30,35 @@ from .youtube import YouTubeUploader
 CLIP_COST = {"veo3_lite": 0.175, "veo3_fast": 0.325, "veo3": 1.275}
 NARRATION_COST_PER_1K_CHARS = 0.10
 
-# A Short is short enough that losing a shot is obvious; a 5-minute story can
+# A Short is short enough that losing a shot is obvious; a long explainer can
 # absorb a couple of gaps rather than throwing the whole render away.
 MAX_FAILED_SHOT_RATIO = {"short": 0.0, "long": 0.1}
+
+# Shots in a chain open on the previous shot's last frame, which is what stops
+# the subject being redrawn from scratch every 8 seconds. That forces them to be
+# generated one after another, so chains are capped: a long chain would serialise
+# the whole render, and a scene change is a natural place to break continuity
+# anyway. 75 shots at this cap is 15 chains, which still saturates the pool.
+MAX_CHAIN_LENGTH = 5
+
+
+def _chain_shots(shots: List[dict]) -> List[List[dict]]:
+    """Group consecutive shots that share a background into continuity chains."""
+    chains: List[List[dict]] = []
+    current: List[dict] = []
+    for shot in shots:
+        continues = (
+            current
+            and shot.get("background") == current[-1].get("background")
+            and len(current) < MAX_CHAIN_LENGTH
+        )
+        if not continues and current:
+            chains.append(current)
+            current = []
+        current.append(shot)
+    if current:
+        chains.append(current)
+    return chains
 
 
 @dataclass
@@ -68,13 +94,17 @@ class Pipeline:
     # ── Scheduling ────────────────────────────────────────────────────────
 
     def formats_for(self, today: date) -> List[str]:
-        """Which video formats are due today. Shorts are daily, long is weekly."""
+        """Which video formats are due today."""
         weekday = today.weekday()
         formats = []
         if weekday in self.config.get("pipeline.short_days", []):
             formats.append("short")
         if weekday in self.config.get("pipeline.long_days", []):
-            formats.append("long")
+            # An expensive video can run less often than weekly. The ISO week
+            # number keeps the cadence stable across year boundaries.
+            every = self.config.get("pipeline.long_every_weeks", 1)
+            if every <= 1 or today.isocalendar()[1] % every == 0:
+                formats.append("long")
         return formats
 
     def content_type_for(self, today: date) -> str:
@@ -298,8 +328,10 @@ class Pipeline:
     def _render_clips(
         self, story: dict, work_dir: Path, aspect_ratio: str, veo_model: str
     ):
+        chains = _chain_shots(story["shots"])
         self.logger.info(
-            "Generating %d Veo clips (%s, %s)", len(story["shots"]), veo_model, aspect_ratio
+            "Generating %d Veo clips in %d chained scenes (%s, %s)",
+            len(story["shots"]), len(chains), veo_model, aspect_ratio,
         )
         clips: Dict[str, Path] = {}
         failed: List[str] = []
@@ -310,42 +342,61 @@ class Pipeline:
         # generates nothing and so costs nothing, whereas giving up strands
         # every clip already paid for in this episode.
         attempts = self.config.get("kie.clip_attempts", 3)
+        resolution = self.config.get(f"{story['format']}.resolution", "1080p")
 
-        def task(shot: dict):
+        def task(chain: List[dict]):
             def run():
-                shot_id = shot["shot_id"]
-                for attempt in range(1, attempts + 1):
-                    try:
-                        url = self.kie.generate_clip(
-                            prompt=shot["veo_prompt"],
-                            aspect_ratio=aspect_ratio,
-                            model=veo_model,
-                            resolution=self.config.get(
-                                f"{story['format']}.resolution", "1080p"
-                            ),
-                            reference_urls=[],
-                            label=shot_id,
-                        )
-                        path = download(url, work_dir / "clips" / f"{shot_id}.mp4")
-                        with lock:
-                            clips[shot_id] = path
-                        return
-                    except Exception as exc:  # noqa: BLE001 - handled by caller
-                        if attempt == attempts:
-                            self.logger.error(
-                                "%s failed after %d attempts: %s", shot_id, attempts, exc
+                # Carried from shot to shot: each clip opens on the frame the
+                # previous one ended on. None means this shot starts a scene.
+                first_frame_url = None
+                for shot in chain:
+                    shot_id = shot["shot_id"]
+                    for attempt in range(1, attempts + 1):
+                        try:
+                            url = self.kie.generate_clip(
+                                prompt=shot["veo_prompt"],
+                                aspect_ratio=aspect_ratio,
+                                model=veo_model,
+                                resolution=resolution,
+                                first_frame_url=first_frame_url,
+                                label=shot_id,
                             )
+                            path = download(url, work_dir / "clips" / f"{shot_id}.mp4")
                             with lock:
-                                failed.append(shot_id)
-                        else:
-                            self.logger.warning(
-                                "%s attempt %d/%d failed (%s); retrying",
-                                shot_id, attempt, attempts, exc,
-                            )
+                                clips[shot_id] = path
+                            first_frame_url = self._chain_frame(path, work_dir, shot_id)
+                            break
+                        except Exception as exc:  # noqa: BLE001 - handled by caller
+                            if attempt == attempts:
+                                self.logger.error(
+                                    "%s failed after %d attempts: %s",
+                                    shot_id, attempts, exc,
+                                )
+                                with lock:
+                                    failed.append(shot_id)
+                                # The link is broken, so the next shot in this
+                                # scene starts fresh rather than from a stale frame.
+                                first_frame_url = None
+                            else:
+                                self.logger.warning(
+                                    "%s attempt %d/%d failed (%s); retrying",
+                                    shot_id, attempt, attempts, exc,
+                                )
             return run
 
-        self.kie.run_parallel([task(shot) for shot in story["shots"]])
+        self.kie.run_parallel([task(chain) for chain in chains])
         return clips, failed
+
+    def _chain_frame(self, clip: Path, work_dir: Path, shot_id: str) -> Optional[str]:
+        """Host this clip's final frame so the next shot can open on it."""
+        try:
+            frame = assemble.last_frame(clip, work_dir / "frames" / f"{shot_id}.jpg")
+            return self.kie.upload_image(frame)
+        except Exception as exc:  # noqa: BLE001 - continuity is not worth the run
+            self.logger.warning(
+                "%s: could not hand a frame to the next shot (%s)", shot_id, exc
+            )
+            return None
 
     def _assemble(
         self,

@@ -12,12 +12,13 @@ Generated media is deleted by kie.ai after 14 days, which is fine because
 everything is downloaded within the same run.
 """
 
+import base64
 import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional
 
 import requests
 
@@ -31,6 +32,8 @@ class KieClient:
         self.config = config
         self.logger = config.logger.getChild("kie")
         self.base_url = config.get("kie.base_url", "https://api.kie.ai/api/v1").rstrip("/")
+        # File upload sits outside the versioned path, unlike every other call.
+        self.file_url = config.get("kie.file_url", "https://api.kie.ai/api").rstrip("/")
         self.poll_interval = config.get("kie.poll_interval_seconds", 10)
         self.max_poll_seconds = config.get("kie.max_poll_seconds", 900)
         self.max_workers = config.get("kie.max_parallel_jobs", 5)
@@ -106,13 +109,43 @@ class KieClient:
 
     # ── Veo API: video clips ──────────────────────────────────────────────
 
+    def upload_image(self, path: Path, upload_path: str = "frames") -> str:
+        """Host an image on kie.ai and return a URL the Veo API can read.
+
+        Veo only accepts images by URL, and every third-party host tried for
+        this project refused the uploads. kie.ai hosts them itself behind the
+        same token, so there is no extra account or key. Files are deleted
+        after 3 days, which is irrelevant here: they are consumed minutes later
+        in the same run.
+        """
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        resp = requests.post(
+            f"{self.file_url}/file-base64-upload",
+            headers=self._headers,
+            json={
+                "base64Data": f"data:image/jpeg;base64,{encoded}",
+                "uploadPath": upload_path,
+                "fileName": path.name,
+            },
+            timeout=120,
+        )
+        if resp.status_code >= 400:
+            raise KieError(f"Frame upload returned {resp.status_code}: {resp.text[:300]}")
+        body = resp.json()
+        if body.get("code") != 200:
+            raise KieError(f"Frame upload error: {body.get('msg', body)}")
+        url = (body.get("data") or {}).get("downloadUrl")
+        if not url:
+            raise KieError(f"Frame upload returned no downloadUrl: {str(body)[:200]}")
+        return url
+
     def generate_clip(
         self,
         prompt: str,
         aspect_ratio: str,
         model: str = "veo3_fast",
         resolution: str = "1080p",
-        reference_urls: Optional[Sequence[str]] = None,
+        first_frame_url: Optional[str] = None,
         label: str = "clip",
     ) -> str:
         payload = {
@@ -123,16 +156,14 @@ class KieClient:
             "duration": 8,
             "enableTranslation": False,  # prompts are already English
         }
-        if reference_urls:
-            # REFERENCE_2_VIDEO keeps the character identical across clips.
-            # It accepts 1-3 images and only runs on veo3_fast / veo3_lite.
-            payload["generationType"] = "REFERENCE_2_VIDEO"
-            payload["imageUrls"] = list(reference_urls)[:3]
-            if model == "veo3":
-                self.logger.warning(
-                    "veo3 (Quality) does not support reference images; using veo3_fast"
-                )
-                payload["model"] = "veo3_fast"
+        if first_frame_url:
+            # With a single image this mode "unfolds" the video around it, so
+            # handing it the previous clip's final frame makes this shot open
+            # exactly where the last one ended. Unlike REFERENCE_2_VIDEO it is
+            # not restricted to veo3_fast / veo3_lite, so continuity and the
+            # Quality model can be used together.
+            payload["generationType"] = "FIRST_AND_LAST_FRAMES_2_VIDEO"
+            payload["imageUrls"] = [first_frame_url]
         else:
             payload["generationType"] = "TEXT_2_VIDEO"
 
