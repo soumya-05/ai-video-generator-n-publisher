@@ -180,8 +180,10 @@ class StoryGenerator:
                 },
                 json={
                     "model": self.model,
-                    # A 38-shot script with a full veo_prompt per shot runs long.
-                    "max_tokens": 32000,
+                    # A 75-shot script with a full veo_prompt per shot is a
+                    # large JSON object, and thinking tokens count against this
+                    # budget too. Truncation shows up as malformed JSON.
+                    "max_tokens": self.config.get("story.max_tokens", 64000),
                     "system": SYSTEM_PROMPT,
                     "messages": [{"role": "user", "content": prompt}],
                 },
@@ -232,19 +234,34 @@ A Short is won or lost in the first 2 seconds.
 - Final shot: the consequence or the strangest number, and stop.
 One idea only. Cut every word not carrying information. No sub-topics."""
         else:
-            pacing = f"""SHAPE - full 5-minute explainer ({shot_count} shots)
-- OPEN (first ~1/6): the hook question, then why the intuitive answer fails.
+            pacing = f"""SHAPE - {duration // 60}-minute deep explainer ({shot_count} shots)
+This is the only video published this fortnight, so it has to be worth the
+viewer's whole coffee break. Depth is the point: go far enough that someone who
+already knew the basics still learns something.
+
+- OPEN (first ~1/8): the hook question, then why the intuitive answer fails.
   State plainly what the viewer will understand by the end.
-- BUILD (middle ~4/6): the mechanism assembled step by step, in physical order.
+- BUILD (middle ~6/8): the mechanism assembled step by step, in physical order.
   Introduce exactly one new idea per shot and use the previous shot's idea to
   do it. Every ~6 shots, land a concrete number, a date, or a real-world
   consequence so the viewer gets a reward for staying.
-- CLOSE (last ~1/6): zoom out - what this made possible, what it costs, what
+- CLOSE (last ~1/8): zoom out - what this made possible, what it costs, what
   breaks when it fails, or the open question at the frontier.
-Also required in a long video:
-- One counter-intuitive fact the viewer will want to repeat to someone.
+
+At this length a single flat explanation loses people, so structure it in 4-6
+acts of roughly {max(8, shot_count // 5)} shots. Each act answers one question
+the previous act made the viewer ask, and the last shot of each act should make
+them want the next one. Say the new question out loud in the narration.
+
+Also required at this length:
+- Two or three counter-intuitive facts the viewer will want to repeat, spaced
+  through the video rather than clustered at the start.
 - One moment where you name what people commonly get wrong about this.
-- One quiet shot with a wide, slow visual where the narration says very little."""
+- One passage where you follow a single thing all the way through the system,
+  end to end, so the separate pieces finally connect.
+- Two quiet shots with a wide, slow visual where the narration says very little.
+- Never restate a point already made. At {shot_count} shots the temptation is to
+  pad; every repeated idea is a viewer lost."""
 
         if requested:
             extra = (
@@ -299,10 +316,15 @@ REQUIREMENTS
    or an engine assembly line is "manufacturing". Lightning, ocean waves or
    volcanoes are "nature". A pump, gearbox or hard drive is "mechanism". Cells,
    viruses or blood is "microscopic". Planets, stars or spacecraft is "space".
-2. Invent 4-8 distinct visual settings ("backgrounds") that actually exist in
-   this subject: the specific machine, the specific chamber, the specific
-   landscape, the specific scale. Never use the same background for more than
-   three shots in a row.
+2. Invent {max(4, shot_count // 5)}-{max(6, shot_count // 4)} distinct visual
+   settings ("backgrounds") that actually exist in this subject: the specific
+   machine, the specific chamber, the specific landscape, the specific scale.
+   BACKGROUNDS ARE SCENES AND MUST RUN IN BLOCKS. All the shots using one
+   background have to be consecutive, 3 to 5 of them, and once you leave a
+   background you never return to it. Consecutive shots sharing a background
+   are rendered as one continuous take, each frame continuing the last, so a
+   background that appears alone or that you cut back to later throws that
+   continuity away. Order the backgrounds to follow the explanation.
 3. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
 4. narration for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
    English words. COUNT THE WORDS of every line before you finish and shorten
