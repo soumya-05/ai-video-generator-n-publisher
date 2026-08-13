@@ -19,13 +19,39 @@ API_URL = "https://api.anthropic.com/v1/messages"
 # Narration for this style sits around 2.6 words/second.
 WORDS_PER_SHOT = 21
 
-# Prefixed to every veo_prompt, unchanged. The shots are rendered as separate
-# 8-second clips with no shared context, so an identical opening phrase is the
-# only thing making them look like one continuous video.
-VISUAL_STYLE = (
-    "Clean minimal 3D animation, simple smooth matte shapes, flat muted colour "
-    "palette, soft even lighting, plain uncluttered dark background, no text"
-)
+# One of these is chosen per video to suit the subject, then prefixed verbatim
+# to every veo_prompt in that video. The shots are rendered as separate 8-second
+# clips with no shared context, so an identical opening phrase is the only thing
+# making them look like one continuous video - but the right phrase depends on
+# what is being explained. Chip fabrication needs a cleanroom macro look;
+# lightning needs storm cinematography. A single fixed style made every video
+# look like the same abstract shapes regardless of topic.
+STYLE_MENU = {
+    "manufacturing": (
+        "Photorealistic macro documentary cinematography inside a clean industrial "
+        "facility, precise machined detail, accurate materials, crisp focus, "
+        "soft diffused overhead lighting"
+    ),
+    "nature": (
+        "Photorealistic high-speed nature cinematography, natural light, real "
+        "weather and atmosphere, deep aerial perspective, ultra sharp detail"
+    ),
+    "mechanism": (
+        "Photorealistic engineering cutaway, accurate mechanical geometry and real "
+        "materials, one half of the housing removed to reveal the working parts, "
+        "clean studio lighting, shallow depth of field"
+    ),
+    "microscopic": (
+        "Photorealistic scientific microscopy visualisation, translucent organic "
+        "structures with accurate surface detail, soft volumetric lighting, "
+        "dark field background"
+    ),
+    "space": (
+        "Photorealistic astronomical visualisation, astronomically accurate "
+        "planetary surfaces and stellar detail, hard directional sunlight, deep "
+        "black space, subtle volumetric dust"
+    ),
+}
 
 SYSTEM_PROMPT = """You are a science and engineering explainer writer for a \
 YouTube channel with a worldwide audience, and you also direct the visuals. \
@@ -191,6 +217,9 @@ class StoryGenerator:
         keywords = ", ".join(signals.get("trending_keywords") or []) or "(none available)"
         avoid_block = "\n".join(f"- {line}" for line in avoid) or "- (nothing yet)"
         aspect = self.config.get(f"{video_format}.aspect_ratio", "16:9")
+        style_menu = "\n".join(
+            f'   - {name}: "{text}"' for name, text in STYLE_MENU.items()
+        )
 
         if video_format == "short":
             pacing = f"""SHAPE - 60-second YouTube Short ({shot_count} shots)
@@ -263,38 +292,49 @@ follows from the one before it. Discard any framing every science channel has
 already used. Do not show me this thinking - only the final JSON.
 
 REQUIREMENTS
-1. Invent 4-8 distinct visual settings ("backgrounds"): a clean cutaway of the
-   machine, a simplified cross-section, a single object on an empty backdrop, a
-   stylised microscopic view, a simplified planetary or cosmic view. Keep every
-   setting uncluttered - one clear subject, nothing decorative behind it. Never
-   use the same background for more than three shots in a row.
-2. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
-3. narration for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
+1. Choose the "visual_style" that genuinely suits this subject, by copying ONE
+   value verbatim from this menu:
+{style_menu}
+   Pick on the physics of what you are showing, not on habit. Chip fabrication
+   or an engine assembly line is "manufacturing". Lightning, ocean waves or
+   volcanoes are "nature". A pump, gearbox or hard drive is "mechanism". Cells,
+   viruses or blood is "microscopic". Planets, stars or spacecraft is "space".
+2. Invent 4-8 distinct visual settings ("backgrounds") that actually exist in
+   this subject: the specific machine, the specific chamber, the specific
+   landscape, the specific scale. Never use the same background for more than
+   three shots in a row.
+3. Write exactly {shot_count} shots. Each shot is exactly 8 seconds.
+4. narration for each shot must be {WORDS_PER_SHOT - 4}-{WORDS_PER_SHOT + 4}
    English words. COUNT THE WORDS of every line before you finish and shorten
    any that run over - {WORDS_PER_SHOT + 4} words is a hard limit, because
    longer lines get sped up to fit the 8 seconds.
-4. Every shot must advance the explanation. If a shot could be deleted without
+5. Every shot must advance the explanation. If a shot could be deleted without
    the viewer losing a step, replace it. Give each shot its own beat in "mood".
-5. veo_prompt for each shot must be fully self-contained: never reference bg_id
-   or an earlier shot. Every prompt begins with
-   "{VISUAL_STYLE}," and ends with ", 8 seconds".
-   THE STYLE IS FIXED AND IDENTICAL IN EVERY SHOT - the shots are rendered
-   separately and only look like one video if that opening phrase never varies.
+6. veo_prompt is the most important field. THE VIEWER MUST SEE WHAT THEY HEAR.
+   Each prompt must show the exact thing its own narration is describing, at the
+   moment it is described. If the line says molten steel is poured, the shot is
+   molten steel being poured - not a generic factory, not an abstract shape.
+   Reuse the concrete nouns from that shot's narration inside its veo_prompt.
+   Every prompt begins with the visual_style string you chose in requirement 1,
+   copied character for character, and ends with ", 8 seconds". THE STYLE IS
+   IDENTICAL IN EVERY SHOT - the shots are rendered separately and only look
+   like one video if that opening phrase never varies.
    Between the style and the ending, state:
-     a) the subject, described as a simple clean form: smooth matte surfaces,
-        clear silhouette, a few flat colours, no fine detail, no clutter, no
-        surface wear, no text on the object.
-     b) exactly one thing that moves, slowly. Rotation, a part sliding, liquid
-        flowing, a cutaway opening, a slow zoom. One motion only - busy shots
-        read as messy at this scale.
+     a) the real subject in specific physical detail - name the actual parts,
+        materials, colours, textures and scale a viewer would see. "A 300mm
+        silicon wafer, mirror-polished, held on a vacuum chuck under amber
+        cleanroom light" is right. "A smooth disc shape" is wrong and is the
+        single most common failure. Specific beats simple.
+     b) exactly one thing that moves, slowly, and it must be the thing the
+        narration is about. One motion only - busy shots read as messy.
      c) the camera as a simple move: "slow push-in", "slow orbit", "static wide
         shot", "gentle pan left", "cutaway slowly opening". Vary it between
         shots; never three identical moves in a row.
-   NO human characters, no faces, no hands, no presenter. No photorealism, no
-   film grain, no lens flares, no dust, no scratches, no gritty textures.
+   Keep every prompt self-contained: never reference bg_id or an earlier shot.
+   NO human characters, no faces, no hands, no presenter.
    Never ask for on-screen text, numbers, labels, arrows, letters, subtitles,
    logos, watermarks or UI - the video model renders text as garbage.
-6. YouTube metadata in English, written for a worldwide audience. The title must
+7. YouTube metadata in English, written for a worldwide audience. The title must
    promise the answer to a question - curiosity beats description. The
    description opens with a one-line hook.
 
@@ -303,17 +343,18 @@ Return ONLY this JSON object:
   "title": "catchy title, under 60 characters",
   "subject": "one line statement of exactly what is explained, used to avoid repeats later",
   "takeaway": "one line statement of the single thing the viewer now understands",
+  "visual_style": "the ONE style string copied verbatim from the menu in requirement 1",
   "backgrounds": [
     {{"bg_id": "bg_001",
       "name": "setting name",
-      "description": "visual description of the setting: the subject, its scale, the simple shapes it is built from"}}
+      "description": "what is physically there: the real object, its materials, its scale"}}
   ],
   "shots": [
     {{"shot_id": "shot_001",
       "background": "bg_001",
       "mood": "beat of this shot",
       "narration": "spoken English narration for this 8 second shot",
-      "veo_prompt": "{VISUAL_STYLE}, <subject as simple clean forms>, <the one thing that moves>, <camera move>, 8 seconds"}}
+      "veo_prompt": "<visual_style verbatim>, <the exact thing this shot's narration describes, in specific physical detail>, <the one thing that moves>, <camera move>, 8 seconds"}}
   ],
   "youtube": {{
     "title": "YouTube title under 90 characters",
@@ -337,18 +378,48 @@ def _parse_json(raw: str) -> dict:
         raise StoryGenerationError(f"Malformed JSON from model: {exc}") from exc
 
 
+def _resolve_style(story: dict) -> str:
+    """The one style string every veo_prompt in this video must open with.
+
+    The model is asked to copy a menu value verbatim but sometimes returns the
+    menu key instead, or paraphrases it.
+    """
+    chosen = (story.get("visual_style") or "").strip().rstrip(",")
+    if chosen in STYLE_MENU:  # returned the key, not the value
+        chosen = STYLE_MENU[chosen]
+    if chosen not in STYLE_MENU.values():
+        # A cutaway of the real object is the safest look for "how it works".
+        chosen = STYLE_MENU["mechanism"]
+    story["visual_style"] = chosen
+    return chosen
+
+
+def _strip_style(prompt: str) -> str:
+    """Drop a leading style clause the model wrote for itself, if any."""
+    for text in STYLE_MENU.values():
+        if prompt.startswith(text):
+            return prompt[len(text) :].lstrip(", ")
+    return prompt
+
+
 def _validate(story: dict, expected_shots: int) -> None:
     for field in ("title", "shots", "backgrounds"):
         if not story.get(field):
             raise StoryGenerationError(f"Script is missing required field '{field}'")
 
     bg_ids = {b["bg_id"] for b in story["backgrounds"]}
+    style = _resolve_style(story)
 
     for index, shot in enumerate(story["shots"], start=1):
         shot.setdefault("shot_id", f"shot_{index:03d}")
         for field in ("narration", "veo_prompt"):
             if not shot.get(field):
                 raise StoryGenerationError(f"{shot['shot_id']} is missing '{field}'")
+        # Continuity depends entirely on this prefix being byte-identical across
+        # shots, and the model does paraphrase it. Repairing is free; another
+        # full script generation is not.
+        if not shot["veo_prompt"].startswith(style):
+            shot["veo_prompt"] = f"{style}, {_strip_style(shot['veo_prompt'])}"
         # An unknown id would break the artifact cross-reference later.
         if shot.get("background") not in bg_ids:
             shot["background"] = story["backgrounds"][0]["bg_id"]

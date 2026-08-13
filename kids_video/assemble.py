@@ -30,6 +30,10 @@ VIDEO_ARGS = [
 # Beyond this, speeding the narration up would sound unnatural.
 MAX_SPEEDUP = 1.3
 
+# A breath between one line and the next. Anything longer reads as a mistake:
+# the sentence has ended, the picture is still going, and nothing is happening.
+TAIL_SECONDS = 0.25
+
 
 class AssemblyError(RuntimeError):
     pass
@@ -95,21 +99,29 @@ def build_segment(
     subtitle: Optional[str] = None,
     subtitle_style: Optional[dict] = None,
 ) -> Path:
-    """Replace a Veo clip's own audio with the narration, matching durations."""
+    """Replace a Veo clip's own audio with the narration, matching durations.
+
+    The narration decides how long the shot is, not the clip. Veo always returns
+    a full 8 seconds, but a spoken line is rarely exactly 8 seconds long, so
+    holding every shot open for the clip's full length left a pocket of silence
+    before each cut - eight of them in a one-minute video, which is what made
+    the result feel broken. The clip is trimmed to the line instead.
+    """
     width, height = TARGET_SIZE.get(aspect_ratio, TARGET_SIZE["16:9"])
     clip_seconds = probe_duration(clip)
     narration_seconds = probe_duration(narration)
 
     audio_chain = []
-    if narration_seconds > clip_seconds:
+    if narration_seconds + TAIL_SECONDS > clip_seconds:
         # Gently compress overlong narration rather than freezing the picture
         # for seconds or cutting the sentence off mid-word.
-        tempo = min(MAX_SPEEDUP, narration_seconds / clip_seconds)
+        tempo = min(MAX_SPEEDUP, (narration_seconds + TAIL_SECONDS) / clip_seconds)
         audio_chain.append(f"atempo={tempo:.4f}")
         narration_seconds /= tempo
-    audio_chain.append("apad")  # pad the tail with silence
+    audio_chain.append("apad")  # a beat of silence under the tail of the shot
 
-    segment_seconds = max(clip_seconds, narration_seconds)
+    segment_seconds = narration_seconds + TAIL_SECONDS
+    # Only needed when the line still outruns the clip at maximum speedup.
     pad_seconds = max(0.0, segment_seconds - clip_seconds)
 
     video_chain = [
