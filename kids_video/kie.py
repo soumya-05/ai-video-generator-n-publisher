@@ -32,8 +32,12 @@ class KieClient:
         self.config = config
         self.logger = config.logger.getChild("kie")
         self.base_url = config.get("kie.base_url", "https://api.kie.ai/api/v1").rstrip("/")
-        # File upload sits outside the versioned path, unlike every other call.
-        self.file_url = config.get("kie.file_url", "https://api.kie.ai/api").rstrip("/")
+        # File upload lives on a different host from every other call. The docs
+        # say https://api.kie.ai/api/file-base64-upload; that returns 404 and
+        # this is the host that actually serves it.
+        self.file_url = config.get(
+            "kie.file_url", "https://kieai.redpandaai.co/api"
+        ).rstrip("/")
         self.poll_interval = config.get("kie.poll_interval_seconds", 10)
         self.max_poll_seconds = config.get("kie.max_poll_seconds", 900)
         self.max_workers = config.get("kie.max_parallel_jobs", 5)

@@ -69,7 +69,10 @@ voice:
 
 youtube:
   default_language: en
-  privacy_status: public
+  # First run of the long-form pipeline uploads privately: the OAuth scopes are
+  # upload+readonly, so nothing here can delete a video once it is public.
+  # Review it, then switch this back to `public`.
+  privacy_status: private
   made_for_kids: false   # general audience, 13+; keeps comments and ads intact
   category_id: "28"      # Science & Technology
 
