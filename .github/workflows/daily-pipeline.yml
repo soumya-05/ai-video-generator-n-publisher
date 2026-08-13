@@ -15,6 +15,10 @@ on:
         type: choice
         options: ['', 'short', 'long']
         default: ''
+      skip_upload:
+        description: 'Render but do not publish to YouTube'
+        type: boolean
+        default: false
 
 concurrency:
   # Shared with telegram-requests.yml: two jobs polling Telegram at once would
@@ -25,9 +29,11 @@ concurrency:
 jobs:
   generate-and-publish:
     runs-on: ubuntu-latest
-    # A 38-shot explainer renders ~38 Veo clips, plus up to an hour waiting for
-    # the Telegram approval; give it room.
-    timeout-minutes: 240
+    # A 75-shot explainer renders in 18 chained scenes. Chains run concurrently
+    # but the shots inside one are sequential, and veo3 Quality is slower than
+    # veo3_fast - plus up to an hour waiting for the Telegram approval. 360 is
+    # the GitHub ceiling for a job.
+    timeout-minutes: 350
 
     permissions:
       # The pipeline commits data/history.json back so tomorrow's script knows
@@ -56,6 +62,7 @@ jobs:
         run: |
           ARGS="run"
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.skip_upload }}" = "true" ]; then ARGS="$ARGS --skip-upload"; fi
           if [ -n "${{ inputs.only }}" ]; then ARGS="$ARGS --only ${{ inputs.only }}"; fi
           python run_daily_pipeline.py $ARGS
         env:
@@ -90,6 +97,7 @@ jobs:
           path: |
             logs/
             build/**/*.json
+            build/**/final.mp4
           retention-days: 7
 
       # Covers failures the pipeline's own notifier cannot report, e.g. the job
